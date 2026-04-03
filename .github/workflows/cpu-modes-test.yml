@@ -35,12 +35,27 @@ jobs:
         run: |
           python .github/scripts/cpu_modes_smoke.py
 
+      - name: Collect logs/artifacts into workspace
+        if: always()
+        shell: powershell
+        run: |
+          $dst = Join-Path $env:GITHUB_WORKSPACE "_cpu_test_artifacts"
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+
+          $outDir = Join-Path $env:GITHUB_WORKSPACE "_cpu_test_output"
+          if (Test-Path $outDir) {
+            Copy-Item $outDir (Join-Path $dst "_cpu_test_output") -Recurse -Force
+          }
+
+          $log1 = Join-Path $env:USERPROFILE "clip_ai.log"
+          $log2 = Join-Path $env:USERPROFILE "clip_ai_errors.log"
+          if (Test-Path $log1) { Copy-Item $log1 (Join-Path $dst "clip_ai.log") -Force }
+          if (Test-Path $log2) { Copy-Item $log2 (Join-Path $dst "clip_ai_errors.log") -Force }
+
       - name: Upload logs/artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cpu-modes-artifacts
-          path: |
-            _cpu_test_output
-            C:\Users\runneradmin\clip_ai.log
-            C:\Users\runneradmin\clip_ai_errors.log
+          path: _cpu_test_artifacts
+          if-no-files-found: warn
