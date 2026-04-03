@@ -1,0 +1,3510 @@
+﻿"""
+clip_ai_app_v2.py â€” CLIPÂ·AI ÐÐ°Ñ€ÐµÐ·Ñ‡Ð¸Ðº Ð²Ð¸Ð´ÐµÐ¾ v2.0 Ð¤Ð˜ÐÐÐ›
+ÐÐ²Ñ‚Ð¾Ñ€ Ð¿Ð»Ð°Ð½Ð°: Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒ + Claude
+ÐžÑÐ¾Ð±ÐµÐ½Ð½Ð¾ÑÑ‚Ð¸:
+  - Ð“Ð¸Ð±Ñ€Ð¸Ð´ Ñ€ÐµÐ¶Ð¸Ð¼: CPU + GPU Ð¿Ð°Ñ€Ð°Ð»Ð»ÐµÐ»ÑŒÐ½Ð¾
+  - Ð£ÑÐ¸Ð»ÐµÐ½Ð½Ð°Ñ Ð·Ð°Ñ‰Ð¸Ñ‚Ð°: CPU 60%, GPU 60-70%, Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð½Ñ‹Ðµ Ð¿Ð¾Ñ€Ð¾Ð³Ð¸
+  - Ð’ÐºÐ»Ð°Ð´ÐºÐ¸: Ð’Ð¸Ð´ÐµÐ¾ / ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ / Ð­Ñ„Ñ„ÐµÐºÑ‚Ñ‹ / ÐÐ½Ð°Ð»Ð¸Ð· / ÐŸÑ€Ð¾Ð¸Ð·Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚ÑŒ
+  - Ð¡ÑƒÐ±Ñ‚Ð¸Ñ‚Ñ€Ñ‹ ÐºÐ°Ðº Ð½Ð° ÑˆÐ¾Ñ€Ñ‚ÑÐ°Ñ…, ÑÐºÐ¾Ñ€Ð¾ÑÑ‚ÑŒ, Ð¿Ð°ÑƒÐ·Ð°, ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¸Ðµ Ð½Ð°ÑÑ‚Ñ€Ð¾ÐµÐº
+  - Ð£Ð¼Ð½Ñ‹Ð¹ Ð°Ð½Ð°Ð»Ð¸Ð· Ð²ÑÐµÐ³Ð¾ Ð²Ð¸Ð´ÐµÐ¾ Ð±ÐµÐ· Ð»Ð¸Ð¼Ð¸Ñ‚Ð° 15 Ð¼Ð¸Ð½ÑƒÑ‚
+  - faster-whisper Ñ ÐºÐ¾Ñ€Ñ€ÐµÐºÑ‚Ð½Ð¾Ð¹ Ð¾Ñ‡Ð¸ÑÑ‚ÐºÐ¾Ð¹ VRAM
+"""
+
+import os, json, shutil, threading, subprocess, platform, time, tempfile, math
+import logging
+from enum import Enum
+from typing import Optional, List, Callable
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+import numpy as np
+import wave
+
+# Ð¤Ð¸ÐºÑ Ñ‡Ñ‘Ñ€Ð½Ð¾Ð³Ð¾ ÑÐºÑ€Ð°Ð½Ð° Ð½Ð° Windows (DPI Awareness)
+if platform.system() == "Windows":
+    try:
+        import ctypes
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Ð›ÐžÐ“Ð˜Ð ÐžÐ’ÐÐÐ˜Ð• Ð’ Ð¤ÐÐ™Ð›
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Ð›ÐžÐ“Ð˜Ð ÐžÐ’ÐÐÐ˜Ð• Ð’ Ð¤ÐÐ™Ð› (Ñ„Ð¸ÐºÑ #10 â€” Ñ€Ð°Ð·Ð´ÐµÐ»ÐµÐ½Ð¸Ðµ Ð¾ÑˆÐ¸Ð±Ð¾Ðº, Ñ‚Ñ€ÐµÐ¹ÑÐ¸Ð½Ð³)
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+LOG_FILE     = os.path.join(os.path.expanduser("~"), "clip_ai.log")
+LOG_ERR_FILE = os.path.join(os.path.expanduser("~"), "clip_ai_errors.log")
+
+_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+# ÐžÐ±Ñ‰Ð¸Ð¹ Ð»Ð¾Ð³ â€” INFO Ð¸ Ð²Ñ‹ÑˆÐµ
+_fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
+_fh.setLevel(logging.INFO)
+_fh.setFormatter(_fmt)
+
+# ÐžÑ‚Ð´ÐµÐ»ÑŒÐ½Ñ‹Ð¹ Ð»Ð¾Ð³ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð´Ð»Ñ Ð¾ÑˆÐ¸Ð±Ð¾Ðº â€” WARNING Ð¸ Ð²Ñ‹ÑˆÐµ Ñ Ð¿Ð¾Ð»Ð½Ñ‹Ð¼ Ñ‚Ñ€ÐµÐ¹ÑÐ¸Ð½Ð³Ð¾Ð¼
+_eh = logging.FileHandler(LOG_ERR_FILE, encoding="utf-8")
+_eh.setLevel(logging.WARNING)
+_eh.setFormatter(_fmt)
+
+# ÐšÐ¾Ð½ÑÐ¾Ð»ÑŒ â€” Ñ‚Ð¾Ð»ÑŒÐºÐ¾ WARNING Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð½Ðµ Ð¼ÑƒÑÐ¾Ñ€Ð¸Ñ‚ÑŒ
+_sh = logging.StreamHandler()
+_sh.setLevel(logging.WARNING)
+_sh.setFormatter(_fmt)
+
+logging.basicConfig(level=logging.DEBUG, handlers=[_fh, _eh, _sh])
+logger = logging.getLogger("clip_ai")
+logger.info(f"Ð›Ð¾Ð³ Ð·Ð°Ð¿ÑƒÑ‰ÐµÐ½. Ð¤Ð°Ð¹Ð»: {LOG_FILE} | ÐžÑˆÐ¸Ð±ÐºÐ¸: {LOG_ERR_FILE}")
+
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Ð¡ÐžÐ¡Ð¢ÐžÐ¯ÐÐ˜Ð• ÐŸÐ Ð˜Ð›ÐžÐ–Ð•ÐÐ˜Ð¯ â€” Ð¸ÑÐºÐ»ÑŽÑ‡Ð°ÐµÑ‚ race conditions
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+class AppState(Enum):
+    IDLE     = "idle"
+    RUNNING  = "running"
+    PAUSED   = "paused"
+    STOPPING = "stopping"
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Ð¦Ð•ÐÐ¢Ð ÐÐ›Ð˜Ð—ÐžÐ’ÐÐÐÐÐ¯ ÐžÐ‘Ð ÐÐ‘ÐžÐ¢ÐšÐ ÐžÐ¨Ð˜Ð‘ÐžÐš
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+class AppError(Exception):
+    """Ð‘Ð°Ð·Ð¾Ð²Ñ‹Ð¹ ÐºÐ»Ð°ÑÑ Ð¾ÑˆÐ¸Ð±Ð¾Ðº Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ Ñ ÐºÐ°Ñ‚ÐµÐ³Ð¾Ñ€Ð¸ÑÐ¼Ð¸."""
+    def __init__(self, message: str, recoverable: bool = True):
+        super().__init__(message)
+        self.recoverable = recoverable  # True = Ð¼Ð¾Ð¶Ð½Ð¾ Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð¸Ñ‚ÑŒ, False = ÑÑ‚Ð¾Ð¿
+
+class FFmpegError(AppError):
+    """ÐžÑˆÐ¸Ð±ÐºÐ° FFmpeg â€” Ð¾Ð±Ñ‹Ñ‡Ð½Ð¾ recoverable, Ð¿Ñ€Ð¾Ð¿ÑƒÑÐºÐ°ÐµÐ¼ ÐºÐ»Ð¸Ð¿."""
+    pass
+
+class AudioError(AppError):
+    """ÐžÑˆÐ¸Ð±ÐºÐ° Ð¸Ð·Ð²Ð»ÐµÑ‡ÐµÐ½Ð¸Ñ Ð°ÑƒÐ´Ð¸Ð¾."""
+    pass
+
+class AIError(AppError):
+    """ÐžÑˆÐ¸Ð±ÐºÐ° AI Ð°Ð½Ð°Ð»Ð¸Ð·Ð° â€” recoverable, Ð¿Ñ€Ð¾Ð¿ÑƒÑÐºÐ°ÐµÐ¼ ÑÑ‚Ð¾Ñ‚ Ð°Ð½Ð°Ð»Ð¸Ð·Ð°Ñ‚Ð¾Ñ€."""
+    pass
+
+class GPUError(AppError):
+    """ÐžÑˆÐ¸Ð±ÐºÐ° GPU â€” recoverable, Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°ÐµÐ¼ÑÑ Ð½Ð° CPU."""
+    pass
+
+def handle_error(e: Exception, context: str, logger_inst=None, recoverable: bool = True) -> AppError:
+    """
+    Ð¦ÐµÐ½Ñ‚Ñ€Ð°Ð»Ð¸Ð·Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¹ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚Ñ‡Ð¸Ðº â€” Ð»Ð¾Ð³Ð¸Ñ€ÑƒÐµÑ‚ Ð¸ Ð¾Ð±Ð¾Ñ€Ð°Ñ‡Ð¸Ð²Ð°ÐµÑ‚ Ð² AppError.
+    Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÑŒ Ð²ÐµÐ·Ð´Ðµ Ð²Ð¼ÐµÑÑ‚Ð¾ Ñ€Ð°Ð·Ñ€Ð¾Ð·Ð½ÐµÐ½Ð½Ñ‹Ñ… except.
+    """
+    log = logger_inst or logger
+    if isinstance(e, AppError):
+        log.error(f"[{context}] {type(e).__name__}: {e}")
+        return e
+    log.exception(f"[{context}] ÐÐµÐ¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚Ð°Ð½Ð½Ð°Ñ Ð¾ÑˆÐ¸Ð±ÐºÐ°: {e}")
+    return AppError(str(e), recoverable=recoverable)
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# WORKER Ð¡Ð˜Ð¡Ð¢Ð•ÐœÐ â€” queue.Queue + ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ñ
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+import queue as queue_module
+
+class WorkerEvent:
+    """Ð¡Ð¾Ð±Ñ‹Ñ‚Ð¸Ðµ Ð¾Ñ‚ worker Ðº UI â€” Ð½Ðµ Ñ‚Ñ€Ð¾Ð³Ð°ÐµÐ¼ tkinter Ð¸Ð· Ð¿Ð¾Ñ‚Ð¾ÐºÐ°."""
+    LOG      = "log"
+    PROGRESS = "progress"
+    DONE     = "done"
+    ERROR    = "error"
+
+    def __init__(self, kind: str, data: dict):
+        self.kind = kind
+        self.data = data
+
+class VideoWorker:
+    """
+    Ð˜Ð·Ð¾Ð»Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¹ worker Ð´Ð»Ñ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ¸ Ð²Ð¸Ð´ÐµÐ¾.
+    UI Ð¿Ð¾Ð´Ð¿Ð¸ÑÑ‹Ð²Ð°ÐµÑ‚ÑÑ Ð½Ð° ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ñ Ñ‡ÐµÑ€ÐµÐ· callback â€” Ð½ÐµÑ‚ Ð¿Ñ€ÑÐ¼Ñ‹Ñ… Ð²Ñ‹Ð·Ð¾Ð²Ð¾Ð² tkinter Ð¸Ð· Ð¿Ð¾Ñ‚Ð¾ÐºÐ°.
+    Ð—Ð°Ð´Ð°Ñ‡Ð¸ Ð¿Ñ€Ð¸Ñ…Ð¾Ð´ÑÑ‚ Ñ‡ÐµÑ€ÐµÐ· queue.Queue â€” Ð¼Ð¾Ð¶Ð½Ð¾ Ð´Ð¾Ð±Ð°Ð²Ð»ÑÑ‚ÑŒ Ð½Ð° Ð»ÐµÑ‚Ñƒ.
+    """
+
+    def __init__(self, on_event: Callable[[WorkerEvent], None]):
+        self._task_queue  : queue_module.Queue = queue_module.Queue()
+        self._stop_flag   = threading.Event()
+        self._pause_event = threading.Event()
+        self._pause_event.set()
+        self._on_event    = on_event
+        self._thread      : Optional[threading.Thread] = None
+        self._state_lock  = threading.Lock()
+
+    def submit(self, fn: Callable, *args, **kwargs) -> None:
+        """Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ð·Ð°Ð´Ð°Ñ‡Ñƒ Ð² Ð¾Ñ‡ÐµÑ€ÐµÐ´ÑŒ."""
+        self._task_queue.put((fn, args, kwargs))
+
+    def start(self) -> None:
+        """Ð—Ð°Ð¿ÑƒÑÑ‚Ð¸Ñ‚ÑŒ worker Ð¿Ð¾Ñ‚Ð¾Ðº. Ð—Ð°Ñ‰Ð¸Ñ‚Ð° Ð¾Ñ‚ Ð´Ð²Ð¾Ð¹Ð½Ð¾Ð³Ð¾ Ð·Ð°Ð¿ÑƒÑÐºÐ°."""
+        if self._thread and self._thread.is_alive():
+            logger.warning("VideoWorker ÑƒÐ¶Ðµ Ð·Ð°Ð¿ÑƒÑ‰ÐµÐ½ â€” Ð¿Ñ€Ð¾Ð¿ÑƒÑÐºÐ°ÐµÐ¼ Ð¿Ð¾Ð²Ñ‚Ð¾Ñ€Ð½Ñ‹Ð¹ ÑÑ‚Ð°Ñ€Ñ‚")
+            return
+        self._stop_flag.clear()
+        self._pause_event.set()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        logger.info("VideoWorker Ð·Ð°Ð¿ÑƒÑ‰ÐµÐ½")
+
+    def stop(self) -> None:
+        """ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ worker â€” Ð´Ð¾Ð¶Ð´Ð°Ñ‚ÑŒÑÑ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð¸Ñ Ñ‚ÐµÐºÑƒÑ‰ÐµÐ¹ Ð·Ð°Ð´Ð°Ñ‡Ð¸."""
+        self._stop_flag.set()
+        self._pause_event.set()  # Ñ€Ð°Ð·Ð±Ð»Ð¾ÐºÐ¸Ñ€ÑƒÐµÐ¼ ÐµÑÐ»Ð¸ Ð½Ð° Ð¿Ð°ÑƒÐ·Ðµ
+        self._task_queue.put(None)  # sentinel â€” Ð²Ñ‹Ñ…Ð¾Ð´ Ð¸Ð· Ñ†Ð¸ÐºÐ»Ð°
+        logger.info("VideoWorker: ÑÐ¸Ð³Ð½Ð°Ð» Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²ÐºÐ¸")
+
+    def pause(self) -> None:
+        self._pause_event.clear()
+        logger.info("VideoWorker: Ð¿Ð°ÑƒÐ·Ð°")
+
+    def resume(self) -> None:
+        self._pause_event.set()
+        logger.info("VideoWorker: Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶ÐµÐ½Ð¸Ðµ")
+
+    def is_stopped(self) -> bool:
+        return self._stop_flag.is_set()
+
+    def wait_if_paused(self) -> bool:
+        """Ð–Ð´Ñ‘Ð¼ ÐµÑÐ»Ð¸ Ð½Ð° Ð¿Ð°ÑƒÐ·Ðµ. Ð’Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ False ÐµÑÐ»Ð¸ Ð½ÑƒÐ¶Ð½Ð¾ Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒÑÑ."""
+        while not self._pause_event.is_set():
+            if self._stop_flag.is_set():
+                return False
+            time.sleep(0.1)
+        return not self._stop_flag.is_set()
+
+    def emit(self, kind: str, **data) -> None:
+        """ÐžÑ‚Ð¿Ñ€Ð°Ð²Ð¸Ñ‚ÑŒ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ðµ Ð² UI Ð¿Ð¾Ñ‚Ð¾Ðº."""
+        self._on_event(WorkerEvent(kind, data))
+
+    def _throttle_cpu(self) -> None:
+        """
+        Runtime throttle Ð¿Ð¾ CPU%.
+        Ð–Ð´Ñ‘Ð¼ Ð¿Ð¾ÐºÐ° CPU Ð½Ðµ Ð¾Ð¿ÑƒÑÑ‚Ð¸Ñ‚ÑÑ Ð½Ð¸Ð¶Ðµ 75% â€” Ð´Ð°Ñ‘Ð¼ ÑÐ¸ÑÑ‚ÐµÐ¼Ðµ Ð´Ñ‹ÑˆÐ°Ñ‚ÑŒ.
+        Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ÑÑ Ð¿ÐµÑ€ÐµÐ´ ÐºÐ°Ð¶Ð´Ð¾Ð¹ Ð·Ð°Ð´Ð°Ñ‡ÐµÐ¹ Ð¸ Ð²Ð½ÑƒÑ‚Ñ€Ð¸ Ñ‚ÑÐ¶Ñ‘Ð»Ñ‹Ñ… Ð¾Ð¿ÐµÑ€Ð°Ñ†Ð¸Ð¹.
+        """
+        try:
+            import psutil
+            while not self._stop_flag.is_set():
+                cpu = psutil.cpu_percent(interval=0.5)
+                if cpu < 75:
+                    break
+                logger.debug(f"Worker throttle: CPU {cpu:.0f}% â€” Ð¶Ð´Ñ‘Ð¼...")
+                time.sleep(0.5)
+        except Exception:
+            pass  # psutil Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ â€” Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð°ÐµÐ¼ Ð±ÐµÐ· throttle
+
+    def _throttle_temp(self, max_temp: int = 85) -> None:
+        """
+        Runtime throttle Ð¿Ð¾ Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ðµ CPU.
+        Ð–Ð´Ñ‘Ð¼ Ð¿Ð¾ÐºÐ° Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð° Ð½Ðµ ÑƒÐ¿Ð°Ð´Ñ‘Ñ‚ Ð½Ð¸Ð¶Ðµ max_temp.
+        """
+        try:
+            import psutil
+            while not self._stop_flag.is_set():
+                temps = psutil.sensors_temperatures()
+                if not temps:
+                    break
+                entries = temps.get("coretemp") or temps.get("k10temp") or []
+                if not entries:
+                    break
+                current = max(t.current for t in entries)
+                if current <= max_temp:
+                    break
+                logger.debug(f"Worker temp throttle: CPU {current:.0f}Â°C > {max_temp}Â°C â€” Ð¶Ð´Ñ‘Ð¼...")
+                time.sleep(1.0)
+        except Exception:
+            pass  # sensors Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ñ‹ â€” Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð°ÐµÐ¼
+
+    def _run(self) -> None:
+        """ÐžÑÐ½Ð¾Ð²Ð½Ð¾Ð¹ Ñ†Ð¸ÐºÐ» worker â€” Ð±ÐµÑ€Ñ‘Ñ‚ Ð·Ð°Ð´Ð°Ñ‡Ð¸ Ð¸Ð· Ð¾Ñ‡ÐµÑ€ÐµÐ´Ð¸ Ñ runtime ÐºÐ¾Ð½Ñ‚Ñ€Ð¾Ð»ÐµÐ¼."""
+        logger.info("VideoWorker: Ñ†Ð¸ÐºÐ» Ð·Ð°Ð¿ÑƒÑ‰ÐµÐ½")
+        while not self._stop_flag.is_set():
+            try:
+                item = self._task_queue.get(timeout=1.0)
+                if item is None:  # sentinel
+                    break
+                fn, args, kwargs = item
+                try:
+                    # â”€â”€ Runtime ÐºÐ¾Ð½Ñ‚Ñ€Ð¾Ð»ÑŒ ÐŸÐ•Ð Ð•Ð” Ð·Ð°Ð´Ð°Ñ‡ÐµÐ¹ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    self._throttle_cpu()   # Ð¶Ð´Ñ‘Ð¼ ÐµÑÐ»Ð¸ CPU > 75%
+                    self._throttle_temp()  # Ð¶Ð´Ñ‘Ð¼ ÐµÑÐ»Ð¸ CPU temp > 85Â°C
+                    # â”€â”€ Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÑÐµÐ¼ Ð·Ð°Ð´Ð°Ñ‡Ñƒ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                    fn(*args, **kwargs)
+                except AppError as e:
+                    logger.error(f"VideoWorker Ð·Ð°Ð´Ð°Ñ‡Ð° AppError: {e}")
+                    self.emit(WorkerEvent.ERROR, message=str(e), recoverable=e.recoverable)
+                except Exception as e:
+                    err = handle_error(e, "VideoWorker._run")
+                    self.emit(WorkerEvent.ERROR, message=str(err), recoverable=True)
+                finally:
+                    # Ð“Ð°Ñ€Ð°Ð½Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¹ cleanup Ð¿Ð¾ÑÐ»Ðµ ÐºÐ°Ð¶Ð´Ð¾Ð¹ Ð·Ð°Ð´Ð°Ñ‡Ð¸
+                    try:
+                        import gc; gc.collect()
+                        try:
+                            import torch
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+                    self._task_queue.task_done()
+            except queue_module.Empty:
+                continue
+        logger.info("VideoWorker: Ñ†Ð¸ÐºÐ» Ð·Ð°Ð²ÐµÑ€ÑˆÑ‘Ð½")
+        self.emit(WorkerEvent.DONE, message="ÐžÑ‡ÐµÑ€ÐµÐ´ÑŒ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð°")
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ÐšÐžÐÐ¡Ð¢ÐÐÐ¢Ð«
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+class Config:
+    """Ð’ÑÐµ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ Ð² Ð¾Ð´Ð½Ð¾Ð¼ Ð¼ÐµÑÑ‚Ðµ â€” Ð½Ð¸ÐºÐ°ÐºÐ¸Ñ… Ð¼Ð°Ð³Ð¸Ñ‡ÐµÑÐºÐ¸Ñ… Ñ‡Ð¸ÑÐµÐ» Ð¿Ð¾ ÐºÐ¾Ð´Ñƒ."""
+
+    # Ð¤Ð°Ð¹Ð»Ñ‹
+    SETTINGS_FILE   : str = os.path.join(os.path.expanduser("~"), ".clip_ai_v2_settings.json")
+
+    # ÐÐ°Ñ€ÐµÐ·ÐºÐ°
+    MIN_GAP         : int = 10    # Ð¼Ð¸Ð½Ð¸Ð¼Ð°Ð»ÑŒÐ½Ñ‹Ð¹ Ð·Ð°Ð·Ð¾Ñ€ Ð¼ÐµÐ¶Ð´Ñƒ ÐºÐ»Ð¸Ð¿Ð°Ð¼Ð¸ (ÑÐµÐº)
+
+    # Ð‘ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ñ‹Ðµ Ð´ÐµÑ„Ð¾Ð»Ñ‚Ñ‹ â€” Ð¿Ñ€Ð¾Ð³Ñ€Ð°Ð¼Ð¼Ð° ÐÐ• Ð¿ÐµÑ€ÐµÐ³Ñ€ÑƒÐ¶Ð°ÐµÑ‚ Ð¶ÐµÐ»ÐµÐ·Ð¾
+    CPU_THREAD_PCT  : int = 60    # % Ð¾Ñ‚ Ð²ÑÐµÑ… ÑÐ´ÐµÑ€
+    GPU_VRAM_PCT    : int = 60    # % VRAM
+    CPU_TEMP_MAX    : int = 80    # Â°C
+    GPU_TEMP_MAX    : int = 75    # Â°C
+    CPU_RESERVED_CORES : int = 2  # Ð²ÑÐµÐ³Ð´Ð° Ð¾ÑÑ‚Ð°Ð²Ð»ÑÐµÐ¼ ÑÐ¸ÑÑ‚ÐµÐ¼Ðµ Ð¼Ð¸Ð½Ð¸Ð¼ÑƒÐ¼ 2 ÑÐ´Ñ€Ð°
+    CPU_MAX_PCT_CAP    : int = 75 # Ð²ÐµÑ€Ñ…Ð½Ð¸Ð¹ cap Ð¿Ð¾Ñ‚Ð¾ÐºÐ¾Ð² Ð¾Ñ‚ Ð¾Ð±Ñ‰ÐµÐ³Ð¾ Ñ‡Ð¸ÑÐ»Ð° ÑÐ´ÐµÑ€
+    GPU_VRAM_MIN_PCT   : int = 30
+    GPU_VRAM_MAX_PCT   : int = 90
+    CPU_TEMP_MIN_C     : int = 60
+    CPU_TEMP_MAX_C     : int = 90
+    GPU_TEMP_MIN_C     : int = 60
+    GPU_TEMP_MAX_C     : int = 85
+
+    # ÐœÐ¾Ð½Ð¸Ñ‚Ð¾Ñ€Ð¸Ð½Ð³ Ð¸ Ð·Ð°Ñ‰Ð¸Ñ‚Ð°
+    TEMP_CHECK_SEC  : int   = 2    # Ð¸Ð½Ñ‚ÐµÑ€Ð²Ð°Ð» Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ¸ Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹
+    TEMP_COOLDOWN   : int   = 8    # Â°C Ð½Ð¸Ð¶Ðµ Ð¿Ð¾Ñ€Ð¾Ð³Ð° = Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð°ÐµÐ¼
+    TEMP_TIMEOUT    : int   = 300  # Ð¼Ð°ÐºÑÐ¸Ð¼ÑƒÐ¼ ÑÐµÐºÑƒÐ½Ð´ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ Ð¾Ñ…Ð»Ð°Ð¶Ð´ÐµÐ½Ð¸Ñ
+    THROTTLE_SLEEP  : float = 0.3  # Ð¿Ð°ÑƒÐ·Ð° Ð¼ÐµÐ¶Ð´Ñƒ Ñ‚ÑÐ¶Ñ‘Ð»Ñ‹Ð¼Ð¸ Ð¾Ð¿ÐµÑ€Ð°Ñ†Ð¸ÑÐ¼Ð¸
+
+    # FFmpeg
+    FFMPEG_TIMEOUT  : int = 3600   # Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚ Ð½Ð° Ð²ÐµÑÑŒ Ð¿Ñ€Ð¾Ñ†ÐµÑÑ
+    CLIP_TIMEOUT    : int = 600    # Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚ Ð½Ð° Ð¾Ð´Ð¸Ð½ ÐºÐ»Ð¸Ð¿ (10 Ð¼Ð¸Ð½ÑƒÑ‚)
+    PROBE_TIMEOUT   : int = 30     # Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚ ffprobe
+
+    # ÐÐ½Ð°Ð»Ð¸Ð·
+    MOTION_SKIP_BASE : int = 12    # Ð±Ð°Ð·Ð¾Ð²Ñ‹Ð¹ skip ÐºÐ°Ð´Ñ€Ð¾Ð² Ð´Ð»Ñ Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ
+    FACES_SKIP_BASE  : int = 15    # Ð±Ð°Ð·Ð¾Ð²Ñ‹Ð¹ skip ÐºÐ°Ð´Ñ€Ð¾Ð² Ð´Ð»Ñ Ð»Ð¸Ñ†
+    MOTION_ADAPT_DIV : int = 300   # Ð´ÐµÐ»Ð¸Ñ‚ÐµÐ»ÑŒ Ð´Ð»Ñ Ð°Ð´Ð°Ð¿Ñ‚Ð¸Ð²Ð½Ð¾Ð³Ð¾ skip
+    FACES_ADAPT_DIV  : int = 240   # Ð´ÐµÐ»Ð¸Ñ‚ÐµÐ»ÑŒ Ð´Ð»Ñ Ð°Ð´Ð°Ð¿Ñ‚Ð¸Ð²Ð½Ð¾Ð³Ð¾ skip
+    BALANCED_MOTION_SKIP_MULT : float = 3.0  # balanced Ð°Ð½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ Ð·Ð°Ð¼ÐµÑ‚Ð½Ð¾ Ð±Ñ‹ÑÑ‚Ñ€ÐµÐµ
+    FACE_GPU_MODELS : tuple = (
+        "face_detection_yunet_2023mar.onnx",
+        "face_detection_yunet_2022mar.onnx",
+        "face_detector_yunet.onnx",
+        "yunet.onnx",
+    )
+    FACE_GPU_INPUT_SIZE : int = 320
+    FACE_GPU_SCORE_THRESHOLD : float = 0.75
+    FACE_GPU_NMS_THRESHOLD : float = 0.30
+    FACE_GPU_TOP_K : int = 2000
+    FACE_TASK_MODELS : tuple = (
+        "face_detection_short_range.tflite",
+        "face_detector.tflite",
+        "blaze_face_short_range.tflite",
+    )
+    AUDIO_MAX_SAMPLES: int = 50_000_000  # Ð¼Ð°ÐºÑ ÑÑÐ¼Ð¿Ð»Ð¾Ð² Ð°ÑƒÐ´Ð¸Ð¾
+    LAUGH_THRESHOLD  : float = 2.5  # Ð¼Ð½Ð¾Ð¶Ð¸Ñ‚ÐµÐ»ÑŒ ÑÑ€ÐµÐ´Ð½ÐµÐ³Ð¾ Ð´Ð»Ñ Ð´ÐµÑ‚ÐµÐºÑ‚Ð° ÑÐ¼ÐµÑ…Ð°
+    WHISPER_VRAM_MB  : int = 500    # Ð¿Ñ€Ð¸Ð¼ÐµÑ€Ð½Ñ‹Ð¹ VRAM Ð´Ð»Ñ Whisper tiny
+    FACES_VRAM_MB    : int = 300    # Ð¿Ñ€Ð¸Ð¼ÐµÑ€Ð½Ñ‹Ð¹ VRAM Ð´Ð»Ñ MediaPipe
+
+# ÐÐ»Ð¸Ð°ÑÑ‹ Ð´Ð»Ñ ÑÐ¾Ð²Ð¼ÐµÑÑ‚Ð¸Ð¼Ð¾ÑÑ‚Ð¸
+MIN_GAP              = Config.MIN_GAP
+SETTINGS_FILE        = Config.SETTINGS_FILE
+DEFAULT_CPU_THREAD_PCT = Config.CPU_THREAD_PCT
+DEFAULT_GPU_VRAM_PCT = Config.GPU_VRAM_PCT
+DEFAULT_CPU_TEMP_MAX = Config.CPU_TEMP_MAX
+DEFAULT_GPU_TEMP_MAX = Config.GPU_TEMP_MAX
+TEMP_CHECK_INTERVAL  = Config.TEMP_CHECK_SEC
+TEMP_COOLDOWN_DELTA  = Config.TEMP_COOLDOWN
+THROTTLE_SLEEP       = Config.THROTTLE_SLEEP
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# RETRY Ð£Ð¢Ð˜Ð›Ð˜Ð¢Ð
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+def with_retry(fn: Callable, retries: int = 2, delay: float = 2.0,
+               error_cls: type = AppError, context: str = "") -> any:
+    """
+    Ð’Ñ‹Ð¿Ð¾Ð»Ð½ÑÐµÑ‚ fn Ñ Ð¿Ð¾Ð²Ñ‚Ð¾Ñ€Ð½Ñ‹Ð¼Ð¸ Ð¿Ð¾Ð¿Ñ‹Ñ‚ÐºÐ°Ð¼Ð¸ Ð¿Ñ€Ð¸ Ð¾ÑˆÐ¸Ð±ÐºÐµ.
+    retries â€” ÑÐºÐ¾Ð»ÑŒÐºÐ¾ Ñ€Ð°Ð· Ð¿Ð¾Ð²Ñ‚Ð¾Ñ€Ð¸Ñ‚ÑŒ Ð¿Ð¾ÑÐ»Ðµ Ð¿ÐµÑ€Ð²Ð¾Ð¹ Ð½ÐµÑƒÐ´Ð°Ñ‡Ð¸.
+    delay   â€” Ð¿Ð°ÑƒÐ·Ð° Ð¼ÐµÐ¶Ð´Ñƒ Ð¿Ð¾Ð¿Ñ‹Ñ‚ÐºÐ°Ð¼Ð¸ Ð² ÑÐµÐºÑƒÐ½Ð´Ð°Ñ….
+    Ð‘Ñ€Ð¾ÑÐ°ÐµÑ‚ Ð¿Ð¾ÑÐ»ÐµÐ´Ð½ÐµÐµ Ð¸ÑÐºÐ»ÑŽÑ‡ÐµÐ½Ð¸Ðµ ÐµÑÐ»Ð¸ Ð²ÑÐµ Ð¿Ð¾Ð¿Ñ‹Ñ‚ÐºÐ¸ Ð¿Ñ€Ð¾Ð²Ð°Ð»Ð¸Ð»Ð¸ÑÑŒ.
+    """
+    last_exc = None
+    for attempt in range(1, retries + 2):  # +2 = Ð¿ÐµÑ€Ð²Ð°Ñ Ð¿Ð¾Ð¿Ñ‹Ñ‚ÐºÐ° + retries
+        try:
+            return fn()
+        except Exception as e:
+            last_exc = e
+            if attempt <= retries:
+                logger.warning(f"[{context}] ÐŸÐ¾Ð¿Ñ‹Ñ‚ÐºÐ° {attempt} Ð½Ðµ ÑƒÐ´Ð°Ð»Ð°ÑÑŒ: {e} â€” Ð¿Ð¾Ð²Ñ‚Ð¾Ñ€ Ñ‡ÐµÑ€ÐµÐ· {delay}Ñ")
+                time.sleep(delay)
+            else:
+                logger.error(f"[{context}] Ð’ÑÐµ {retries + 1} Ð¿Ð¾Ð¿Ñ‹Ñ‚Ð¾Ðº Ð¿Ñ€Ð¾Ð²Ð°Ð»Ð¸Ð»Ð¸ÑÑŒ: {e}")
+    raise error_cls(str(last_exc), recoverable=True)
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Ð¦Ð’Ð•Ð¢Ð Ð˜ Ð¨Ð Ð˜Ð¤Ð¢Ð«
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+BG       = "#0B1220"
+BG2      = "#111B2E"
+BG3      = "#1B2A44"
+BG4      = "#27395A"
+RED      = "#FF7A45"
+RED2     = "#FF9960"
+PURPLE   = "#2CC9B5"
+PURPLE2  = "#FFC857"
+PINK     = "#F072A1"
+TEXT     = "#ECF2FA"
+TEXT_DIM = "#91A4BF"
+TEXT_MED = "#C8D6E8"
+SUCCESS  = "#48D17A"
+DANGER   = "#FF6173"
+WARN     = "#F4B03E"
+BORDER   = "#324A70"
+
+FONT_LABEL = ("Bahnschrift SemiBold", 10)
+FONT_MONO  = ("Consolas", 9)
+FONT_BTN   = ("Bahnschrift SemiBold", 10)
+FONT_SMALL = ("Segoe UI", 9)
+
+NO_WINDOW = subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Ð¡Ð˜Ð¡Ð¢Ð•ÐœÐÐ«Ð• Ð£Ð¢Ð˜Ð›Ð˜Ð¢Ð«
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+def get_cpu_count() -> int:
+    try: return os.cpu_count() or 4
+    except Exception: return 4
+
+def safe_cpu_threads(pct: int) -> int:
+    """Ð’Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¿Ð¾Ñ‚Ð¾ÐºÐ¾Ð² CPU â€” Ð¼Ð¸Ð½Ð¸Ð¼ÑƒÐ¼ 1, Ð¾ÑÑ‚Ð°Ð²Ð»ÑÐµÐ¼ Ñ…Ð¾Ñ‚Ñ Ð±Ñ‹ 1 ÑÐ´Ñ€Ð¾ ÑÐ¸ÑÑ‚ÐµÐ¼Ðµ."""
+    total = get_cpu_count()
+    if total <= 1:
+        return 1
+    count = max(1, min(total - 1, math.ceil(total * pct / 100)))
+    return count
+
+def apply_cpu_limit(threads: int) -> None:
+    """ÐŸÑ€Ð¸Ð¼ÐµÐ½ÑÐµÑ‚ Ð¾Ð³Ñ€Ð°Ð½Ð¸Ñ‡ÐµÐ½Ð¸Ðµ Ð¿Ð¾Ñ‚Ð¾ÐºÐ¾Ð² CPU Ñ‡ÐµÑ€ÐµÐ· Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ðµ Ð¾ÐºÑ€ÑƒÐ¶ÐµÐ½Ð¸Ñ."""
+    t = str(threads)
+    for var in ["OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+                "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"]:
+        os.environ[var] = t
+
+def set_process_priority_low() -> None:
+    """ÐŸÐ¾Ð½Ð¸Ð¶Ð°ÐµÐ¼ Ð¿Ñ€Ð¸Ð¾Ñ€Ð¸Ñ‚ÐµÑ‚ Ð¿Ñ€Ð¾Ñ†ÐµÑÑÐ° â€” ÑÐ¸ÑÑ‚ÐµÐ¼Ð° Ñ€Ð°Ð±Ð¾Ñ‚Ð°ÐµÑ‚ Ð¿Ð»Ð°Ð²Ð½ÐµÐµ."""
+    try:
+        import psutil
+        p = psutil.Process()
+        if platform.system() == "Windows":
+            p.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+        else:
+            p.nice(10)
+        logger.info("ÐŸÑ€Ð¸Ð¾Ñ€Ð¸Ñ‚ÐµÑ‚ Ð¿Ñ€Ð¾Ñ†ÐµÑÑÐ° ÑÐ½Ð¸Ð¶ÐµÐ½")
+    except Exception as e:
+        logger.debug(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ½Ð¸Ð·Ð¸Ñ‚ÑŒ Ð¿Ñ€Ð¸Ð¾Ñ€Ð¸Ñ‚ÐµÑ‚ Ð¿Ñ€Ð¾Ñ†ÐµÑÑÐ°: {e}")
+
+def apply_cpu_affinity(threads: int) -> None:
+    """
+    ÐžÐ³Ñ€Ð°Ð½Ð¸Ñ‡Ð¸Ð²Ð°ÐµÐ¼ Ð¿Ñ€Ð¾Ñ†ÐµÑÑ ÐºÐ¾Ð½ÐºÑ€ÐµÑ‚Ð½Ñ‹Ð¼ Ñ‡Ð¸ÑÐ»Ð¾Ð¼ ÑÐ´ÐµÑ€ Ñ‡ÐµÑ€ÐµÐ· cpu_affinity.
+    Ð­Ñ‚Ð¾ Ñ€ÐµÐ°Ð»ÑŒÐ½Ð¾ Ñ€Ð°Ð±Ð¾Ñ‚Ð°ÐµÑ‚ â€” Ð² Ð¾Ñ‚Ð»Ð¸Ñ‡Ð¸Ðµ Ð¾Ñ‚ OMP_NUM_THREADS ÐºÐ¾Ñ‚Ð¾Ñ€Ñ‹Ð¹ FFmpeg Ð¸Ð³Ð½Ð¾Ñ€Ð¸Ñ€ÑƒÐµÑ‚.
+    """
+    try:
+        import psutil
+        p      = psutil.Process()
+        total  = get_cpu_count()
+        count  = max(1, min(threads, total))
+        # Ð‘ÐµÑ€Ñ‘Ð¼ Ð¿ÐµÑ€Ð²Ñ‹Ðµ N ÑÐ´ÐµÑ€
+        cores  = list(range(total))[:count]
+        p.cpu_affinity(cores)
+        logger.info(f"CPU affinity: {count} Ð¸Ð· {total} ÑÐ´ÐµÑ€ ({cores})")
+    except AttributeError:
+        # cpu_affinity Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶Ð¸Ð²Ð°ÐµÑ‚ÑÑ Ð½Ð° ÑÑ‚Ð¾Ð¹ Ð¿Ð»Ð°Ñ‚Ñ„Ð¾Ñ€Ð¼Ðµ
+        logger.debug("cpu_affinity Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ â€” Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ OMP_NUM_THREADS")
+    except Exception as e:
+        logger.debug(f"cpu_affinity Ð¾ÑˆÐ¸Ð±ÐºÐ°: {e}")
+
+def open_folder(path: str) -> None:
+    if platform.system() == "Windows": os.startfile(path)
+    elif platform.system() == "Darwin": subprocess.run(["open", path])
+    else: subprocess.run(["xdg-open", path])
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# GPU ÐœÐ•ÐÐ•Ð”Ð–Ð•Ð  â€” Ð²ÑÑ Ñ€Ð°Ð±Ð¾Ñ‚Ð° Ñ GPU Ñ‡ÐµÑ€ÐµÐ· Ð¾Ð´Ð¸Ð½ ÐºÐ»Ð°ÑÑ
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+class GPUManager:
+    """
+    Ð¦ÐµÐ½Ñ‚Ñ€Ð°Ð»Ð¸Ð·Ð¾Ð²Ð°Ð½Ð½Ð¾Ðµ ÑƒÐ¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ GPU.
+    Ð’ÑÐµ Ð¾Ð¿ÐµÑ€Ð°Ñ†Ð¸Ð¸ Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ñ‹ â€” Ð½Ð¸ÐºÐ¾Ð³Ð´Ð° Ð½Ðµ Ð¿Ð°Ð´Ð°ÑŽÑ‚, Ð²ÑÐµÐ³Ð´Ð° ÐµÑÑ‚ÑŒ fallback Ð½Ð° CPU.
+    """
+
+    def __init__(self):
+        self.available    : bool = False
+        self.name         : str  = "ÐÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½"
+        self.vram_total   : int  = 0
+        self.cuda_version : str  = ""
+        self._nvml_ok     : bool = False
+        self._detect()
+
+    def _detect(self) -> None:
+        """ÐžÐ¿Ñ€ÐµÐ´ÐµÐ»ÑÐµÐ¼ GPU Ð¿Ñ€Ð¸ ÑÑ‚Ð°Ñ€Ñ‚Ðµ. ÐÐ¸ÐºÐ¾Ð³Ð´Ð° Ð½Ðµ Ð±Ñ€Ð¾ÑÐ°ÐµÑ‚ Ð¸ÑÐºÐ»ÑŽÑ‡ÐµÐ½Ð¸Ðµ."""
+        try:
+            import torch
+            if torch.cuda.is_available():
+                self.available    = True
+                self.name         = torch.cuda.get_device_name(0)
+                props             = torch.cuda.get_device_properties(0)
+                self.vram_total   = props.total_memory // (1024 * 1024)
+                self.cuda_version = torch.version.cuda or ""
+                logger.info(f"GPU Ð¾Ð±Ð½Ð°Ñ€ÑƒÐ¶ÐµÐ½: {self.name}, VRAM {self.vram_total}MB, CUDA {self.cuda_version}")
+        except Exception as e:
+            logger.debug(f"GPU (torch) Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½: {e}")
+
+        try:
+            import ctypes
+            # Ð—Ð°Ð³Ñ€ÑƒÐ¶Ð°ÐµÐ¼ nvml.dll Ð½Ð°Ð¿Ñ€ÑÐ¼ÑƒÑŽ Ð¸Ð· System32 (Ñ„Ð¸ÐºÑ Ð´Ð»Ñ Windows)
+            ctypes.CDLL("C:\\Windows\\System32\\nvml.dll")
+            import pynvml
+            pynvml.nvmlInit()
+            self._nvml_ok = True
+            logger.debug("pynvml Ð¸Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð¸Ñ€Ð¾Ð²Ð°Ð½ ÑƒÑÐ¿ÐµÑˆÐ½Ð¾")
+        except Exception as e:
+            self._nvml_ok = False
+            logger.debug(f"pynvml Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½: {e}")
+
+    def temperature(self) -> Optional[int]:
+        """Ð¢ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð° GPU Ð² Â°C. ÐŸÑ€Ð¾Ð±ÑƒÐµÑ‚ pynvml, Ð¿Ð¾Ñ‚Ð¾Ð¼ nvidia-smi."""
+        # ÐŸÐ¾Ð¿Ñ‹Ñ‚ÐºÐ° Ñ‡ÐµÑ€ÐµÐ· pynvml
+        if self._nvml_ok:
+            try:
+                import pynvml
+                h = pynvml.nvmlDeviceGetHandleByIndex(0)
+                return pynvml.nvmlDeviceGetTemperature(h, pynvml.NVML_TEMPERATURE_GPU)
+            except Exception as e:
+                logger.debug(f"pynvml temperature fallback: {e}")
+
+        # Fallback â€” nvidia-smi Ð½Ð°Ð¿Ñ€ÑÐ¼ÑƒÑŽ
+        try:
+            res = subprocess.run(
+                ["nvidia-smi", "--query-gpu=temperature.gpu", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=3, creationflags=NO_WINDOW)
+            if res.returncode == 0:
+                val = res.stdout.strip()
+                if val.isdigit():
+                    return int(val)
+        except Exception as e:
+            logger.debug(f"nvidia-smi temperature Ð¾ÑˆÐ¸Ð±ÐºÐ°: {e}")
+        return None
+
+    def utilization_pct(self) -> Optional[int]:
+        """Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° GPU Ð² Ð¿Ñ€Ð¾Ñ†ÐµÐ½Ñ‚Ð°Ñ…. ÐŸÑ€Ð¾Ð±ÑƒÐµÑ‚ pynvml, Ð¿Ð¾Ñ‚Ð¾Ð¼ nvidia-smi."""
+        if self._nvml_ok:
+            try:
+                import pynvml
+                h = pynvml.nvmlDeviceGetHandleByIndex(0)
+                util = pynvml.nvmlDeviceGetUtilizationRates(h)
+                val = int(getattr(util, "gpu", 0))
+                return clamp(val, 0, 100)
+            except Exception as e:
+                logger.debug(f"pynvml utilization fallback: {e}")
+
+        try:
+            res = subprocess.run(
+                ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=3, creationflags=NO_WINDOW
+            )
+            if res.returncode == 0:
+                raw = (res.stdout or "").strip().splitlines()
+                if raw:
+                    txt = raw[0].strip().replace("%", "")
+                    if txt.isdigit():
+                        return clamp(int(txt), 0, 100)
+        except Exception as e:
+            logger.debug(f"nvidia-smi utilization Ð¾ÑˆÐ¸Ð±ÐºÐ°: {e}")
+        return None
+
+    def vram_used_mb(self) -> Optional[int]:
+        """Ð—Ð°Ð½ÑÑ‚Ñ‹Ð¹ VRAM Ð² MB. Ð¡Ð½Ð°Ñ‡Ð°Ð»Ð° pynvml, Ð¿Ð¾Ñ‚Ð¾Ð¼ torch ÐºÐ°Ðº fallback."""
+        # ÐŸÐ¾Ð¿Ñ‹Ñ‚ÐºÐ° Ñ‡ÐµÑ€ÐµÐ· pynvml
+        if self._nvml_ok:
+            try:
+                import pynvml
+                h   = pynvml.nvmlDeviceGetHandleByIndex(0)
+                mem = pynvml.nvmlDeviceGetMemoryInfo(h)
+                return mem.used // (1024 * 1024)
+            except Exception as e:
+                logger.debug(f"pynvml vram_used fallback to torch: {e}")
+
+        # Fallback â€” torch (Ð²ÑÐµÐ³Ð´Ð° Ð´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ ÐµÑÐ»Ð¸ GPU ÐµÑÑ‚ÑŒ)
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return torch.cuda.memory_allocated(0) // (1024 * 1024)
+        except Exception as e:
+            logger.debug(f"torch vram_used Ð¾ÑˆÐ¸Ð±ÐºÐ°: {e}")
+        return None
+
+    def vram_free_mb(self) -> Optional[int]:
+        """Ð¡Ð²Ð¾Ð±Ð¾Ð´Ð½Ñ‹Ð¹ VRAM Ð² MB. Ð¡Ð½Ð°Ñ‡Ð°Ð»Ð° pynvml, Ð¿Ð¾Ñ‚Ð¾Ð¼ torch ÐºÐ°Ðº fallback."""
+        # ÐŸÐ¾Ð¿Ñ‹Ñ‚ÐºÐ° Ñ‡ÐµÑ€ÐµÐ· pynvml
+        if self._nvml_ok:
+            try:
+                import pynvml
+                h   = pynvml.nvmlDeviceGetHandleByIndex(0)
+                mem = pynvml.nvmlDeviceGetMemoryInfo(h)
+                return mem.free // (1024 * 1024)
+            except Exception as e:
+                logger.debug(f"pynvml vram_free fallback to torch: {e}")
+
+        # Fallback â€” torch
+        try:
+            import torch
+            if torch.cuda.is_available():
+                total = torch.cuda.get_device_properties(0).total_memory
+                used  = torch.cuda.memory_allocated(0)
+                return (total - used) // (1024 * 1024)
+        except Exception as e:
+            logger.debug(f"torch vram_free Ð¾ÑˆÐ¸Ð±ÐºÐ°: {e}")
+
+        # ÐŸÐ¾ÑÐ»ÐµÐ´Ð½Ð¸Ð¹ fallback â€” ÐµÑÐ»Ð¸ ÑÐ¾Ð²ÑÐµÐ¼ Ð½Ð¸Ñ‡ÐµÐ³Ð¾ Ð½ÐµÑ‚, ÑÑ‡Ð¸Ñ‚Ð°ÐµÐ¼ Ñ‡Ñ‚Ð¾ 50% ÑÐ²Ð¾Ð±Ð¾Ð´Ð½Ð¾
+        if self.vram_total > 0:
+            logger.warning("VRAM Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ñ‹ â€” Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ 50% ÐºÐ°Ðº Ð¾Ñ†ÐµÐ½ÐºÑƒ")
+            return self.vram_total // 2
+        return None
+
+    def vram_pct_used(self) -> Optional[int]:
+        """ÐŸÑ€Ð¾Ñ†ÐµÐ½Ñ‚ Ð·Ð°Ð½ÑÑ‚Ð¾Ð³Ð¾ VRAM. None ÐµÑÐ»Ð¸ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾."""
+        used = self.vram_used_mb()
+        if used is None or self.vram_total == 0: return None
+        return int(used / self.vram_total * 100)
+
+    def can_fit_model(self, model_mb: int, limit_pct: int) -> bool:
+        """
+        ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÑ‚ Ñ…Ð²Ð°Ñ‚Ð°ÐµÑ‚ Ð»Ð¸ VRAM Ð´Ð»Ñ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ¸ Ð¼Ð¾Ð´ÐµÐ»Ð¸ Ñ ÑƒÑ‡Ñ‘Ñ‚Ð¾Ð¼ Ð»Ð¸Ð¼Ð¸Ñ‚Ð°.
+        Ð•ÑÐ»Ð¸ Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð¾ VRAM Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ñ‹ â€” Ñ€Ð°Ð·Ñ€ÐµÑˆÐ°ÐµÐ¼ GPU (Ð½Ðµ Ð±Ð»Ð¾ÐºÐ¸Ñ€ÑƒÐµÐ¼ Ð·Ñ€Ñ).
+        """
+        if not self.available or self.vram_total == 0: return False
+        free = self.vram_free_mb()
+        if free is None:
+            # Ð”Ð°Ð½Ð½Ñ‹Ñ… Ð½ÐµÑ‚ â€” Ð½Ðµ Ð±Ð»Ð¾ÐºÐ¸Ñ€ÑƒÐµÐ¼ GPU, Ð»ÑƒÑ‡ÑˆÐµ Ð¿Ð¾Ð¿Ñ€Ð¾Ð±Ð¾Ð²Ð°Ñ‚ÑŒ Ð¸ Ð¿Ð¾Ð¹Ð¼Ð°Ñ‚ÑŒ Ð¾ÑˆÐ¸Ð±ÐºÑƒ
+            logger.warning(f"can_fit_model: VRAM Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ñ‹ â†’ Ñ€Ð°Ð·Ñ€ÐµÑˆÐ°ÐµÐ¼ GPU Ð´Ð»Ñ {model_mb}MB")
+            return True
+        allowed_mb = int(self.vram_total * limit_pct / 100)
+        used       = self.vram_used_mb() or 0
+        result     = (used + model_mb) <= allowed_mb
+        logger.debug(f"can_fit_model({model_mb}MB): used={used}MB, allowed={allowed_mb}MB â†’ {result}")
+        return result
+
+    def clear_vram(self) -> None:
+        """ÐŸÑ€Ð¸Ð½ÑƒÐ´Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð°Ñ Ð¾Ñ‡Ð¸ÑÑ‚ÐºÐ° VRAM ÐºÑÑˆÐ° PyTorch."""
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                logger.debug("VRAM Ð¾Ñ‡Ð¸Ñ‰ÐµÐ½")
+        except Exception as e:
+            logger.debug(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¾Ñ‡Ð¸ÑÑ‚ÐºÐ¸ VRAM: {e}")
+
+    def short_name(self) -> str:
+        return self.name.replace("NVIDIA GeForce ", "").replace("NVIDIA ", "")
+
+
+# Ð“Ð»Ð¾Ð±Ð°Ð»ÑŒÐ½Ñ‹Ð¹ ÑÐºÐ·ÐµÐ¼Ð¿Ð»ÑÑ€ GPU Ð¼ÐµÐ½ÐµÐ´Ð¶ÐµÑ€Ð°
+GPU = GPUManager()
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# FFMPEG ÐŸÐžÐ˜Ð¡Ðš
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+def find_ff(name):
+    ff = shutil.which(name)
+    if ff: return ff
+    local = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"{name}.exe")
+    if os.path.exists(local): return local
+    for c in [
+        rf"C:\ffmpeg\bin\{name}.exe",
+        rf"C:\Program Files\ffmpeg\bin\{name}.exe",
+        os.path.expanduser(rf"~\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1-full_build\bin\{name}.exe"),
+    ]:
+        if os.path.exists(c): return c
+    return None
+
+FFMPEG  = find_ff("ffmpeg")
+FFPROBE = find_ff("ffprobe")
+
+if not FFMPEG:
+    _r = tk.Tk(); _r.withdraw()
+    messagebox.showerror("FFmpeg Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½", "FFmpeg Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½!\n\nwinget install ffmpeg")
+    _r.destroy()
+    raise SystemExit(1)
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ÐœÐÐ¢Ð•ÐœÐÐ¢Ð˜ÐšÐ
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+def normalize(arr):
+    arr = np.array(arr, dtype=np.float32)
+    if len(arr) == 0: return arr
+    arr = np.nan_to_num(arr, nan=0.0)
+    mx  = np.nanmax(arr)
+    return arr / mx if mx > 0 else arr
+
+def smooth(arr, k=5):
+    if len(arr) < k: return arr
+    return np.convolve(arr, np.ones(k) / k, mode='same')
+
+def safe_add(score, new_score, weight):
+    if new_score is None or len(new_score) == 0 or np.max(new_score) == 0: return score
+    return score + normalize(new_score) * weight
+
+def clamp(value: int, low: int, high: int) -> int:
+    return max(low, min(high, value))
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# UI Ð’Ð˜Ð”Ð–Ð•Ð¢Ð«
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+class NumStepper(tk.Frame):
+    def __init__(self, parent, var, from_=1, to=30, width=4, **kw):
+        bg = parent.cget("bg")
+        super().__init__(parent, bg=bg, **kw)
+        self.var = var; self.from_ = from_; self.to = to
+        bk = dict(bg=BG4, fg=TEXT_MED, font=("Bahnschrift SemiBold", 11), bd=0,
+                  relief="flat", cursor="hand2", width=2,
+                  activebackground=PURPLE, activeforeground=TEXT)
+        tk.Button(self, text="âˆ’", command=self._dec, **bk).pack(side="left")
+        tk.Label(self, textvariable=var, font=("Bahnschrift SemiBold", 11),
+                 bg=bg, fg=TEXT, width=width).pack(side="left", padx=4)
+        tk.Button(self, text="+", command=self._inc, **bk).pack(side="left")
+
+    def _dec(self):
+        if self.var.get() > self.from_: self.var.set(self.var.get() - 1)
+
+    def _inc(self):
+        if self.var.get() < self.to: self.var.set(self.var.get() + 1)
+
+
+class Toggle(tk.Frame):
+    def __init__(self, parent, var, label="", **kw):
+        bg = parent.cget("bg")
+        super().__init__(parent, bg=bg, **kw)
+        self.var = var
+        self.cv  = tk.Canvas(self, width=36, height=18, bg=bg,
+                             highlightthickness=0, cursor="hand2")
+        self.cv.pack(side="left", padx=(0, 6))
+        if label:
+            tk.Label(self, text=label, font=FONT_SMALL, bg=bg, fg=TEXT_MED).pack(side="left")
+        self.cv.bind("<Button-1>", self._toggle)
+        self._draw()
+
+    def _toggle(self, e=None):
+        self.var.set(not self.var.get()); self._draw()
+
+    def _draw(self):
+        self.cv.delete("all")
+        on = self.var.get(); c = PURPLE if on else BG4
+        self.cv.create_oval(0, 1, 18, 17, fill=c, outline="")
+        self.cv.create_oval(18, 1, 36, 17, fill=c, outline="")
+        self.cv.create_rectangle(9, 1, 27, 17, fill=c, outline="")
+        x = 20 if on else 8
+        self.cv.create_oval(x - 7, 2, x + 7, 16, fill=TEXT, outline="")
+
+
+class TabBar(tk.Frame):
+    def __init__(self, parent, tabs, on_change, **kw):
+        super().__init__(parent, bg=BG2, **kw)
+        self.buttons  = {}
+        self._order   = [k for k, _ in tabs]
+        self._visible_keys = set(self._order)
+        self.active   = tk.StringVar(value=tabs[0][0])
+        self.on_change = on_change
+        for key, label in tabs:
+            btn = tk.Button(self, text=label, font=FONT_BTN, bd=0, padx=16, pady=9,
+                            relief="flat", cursor="hand2",
+                            highlightthickness=1, highlightbackground=BORDER, highlightcolor=PURPLE2,
+                            command=lambda k=key: self._select(k))
+            btn.pack(side="left", padx=(0, 6), pady=4)
+            self.buttons[key] = btn
+        self._update()
+
+    def _select(self, key):
+        if key not in self._visible_keys:
+            return
+        self.active.set(key); self._update(); self.on_change(key)
+
+    def set_visible(self, keys):
+        visible = {k for k in keys if k in self.buttons}
+        if not visible:
+            visible = {self._order[0]}
+        self._visible_keys = visible
+        for key in self._order:
+            btn = self.buttons.get(key)
+            if not btn:
+                continue
+            btn.pack_forget()
+            if key in self._visible_keys:
+                btn.pack(side="left")
+        if self.active.get() not in self._visible_keys:
+            for key in self._order:
+                if key in self._visible_keys:
+                    self.active.set(key)
+                    break
+        self._update()
+
+    def _update(self):
+        for key, btn in self.buttons.items():
+            active = self.active.get() == key
+            btn.configure(
+                bg=PURPLE if active else BG2,
+                fg=BG if active else TEXT_DIM,
+                activebackground=PURPLE2 if active else BG3,
+                activeforeground=BG if active else TEXT_MED
+            )
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Ð“Ð›ÐÐ’ÐÐžÐ• ÐŸÐ Ð˜Ð›ÐžÐ–Ð•ÐÐ˜Ð•
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+class ClipAIApp(tk.Tk):
+
+    def __init__(self):
+        super().__init__()
+        self.title("CLIPÂ·AI v2.0 â€” ÐÐ°Ñ€ÐµÐ·Ñ‡Ð¸Ðº Ð²Ð¸Ð´ÐµÐ¾")
+        self.geometry("980x900")
+        self.minsize(820, 720)
+        self.configure(bg=BG)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+
+        # â”€â”€ Ð¡Ð¾ÑÑ‚Ð¾ÑÐ½Ð¸Ðµ (AppState enum Ð¸ÑÐºÐ»ÑŽÑ‡Ð°ÐµÑ‚ race conditions) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        self.video_paths   : List[str] = []
+        self._state        = AppState.IDLE
+        self._state_lock   = threading.Lock()
+        self.pause_event   = threading.Event()
+        self.pause_event.set()
+        self.stop_flag     = threading.Event()
+        self.whisper_model = None
+        self._last_temp_check = 0
+        self._warned_no_cpu_temp_sensor = False
+        self._warned_no_gpu_temp_sensor = False
+        self._warned_no_face_task_model = False
+        self._warned_no_face_gpu_model = False
+        self._warned_no_face_gpu_runtime = False
+        self._warned_motion_gpu_runtime = False
+        self._motion_gpu_cap_checked = False
+        self._motion_gpu_capable = False
+        self._cpu_temp_fallback_cache: Optional[float] = None
+        self._cpu_temp_fallback_ts: float = 0.0
+
+        # â”€â”€ Worker ÑÐ¸ÑÑ‚ÐµÐ¼Ð° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        self._worker = VideoWorker(on_event=self._on_worker_event)
+
+        # â”€â”€ Ð˜Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð°Ñ†Ð¸Ñ Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ñ… â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        self._init_vars()
+
+        # â”€â”€ Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð½Ð°ÑÑ‚Ñ€Ð¾ÐµÐº Ð¸ ÑÑ‚Ð°Ñ€Ñ‚ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        self._load_settings()
+        self._apply_cpu_limit()
+        set_process_priority_low()
+        self.withdraw()
+        self._build_ui()
+        self._monitor_loop()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.update_idletasks()
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    @property
+    def running(self) -> bool:
+        return self._state in (AppState.RUNNING, AppState.PAUSED)
+
+    @property
+    def paused(self) -> bool:
+        return self._state == AppState.PAUSED
+
+    def _set_state(self, state: AppState) -> None:
+        with self._state_lock:
+            logger.info(f"Ð¡Ð¾ÑÑ‚Ð¾ÑÐ½Ð¸Ðµ: {self._state.value} â†’ {state.value}")
+            self._state = state
+
+    def _on_worker_event(self, event: WorkerEvent) -> None:
+        """ÐŸÐ¾Ð»ÑƒÑ‡Ð°ÐµÐ¼ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ñ Ð¾Ñ‚ worker Ð¸ Ð¿ÐµÑ€ÐµÐ´Ð°Ñ‘Ð¼ Ð² UI Ñ‡ÐµÑ€ÐµÐ· after() â€” Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾."""
+        self.after(0, lambda: self._handle_worker_event(event))
+
+    def _handle_worker_event(self, event: WorkerEvent) -> None:
+        """ÐžÐ±Ñ€Ð°Ð±Ð°Ñ‚Ñ‹Ð²Ð°ÐµÐ¼ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ñ worker Ð² UI Ð¿Ð¾Ñ‚Ð¾ÐºÐµ."""
+        if event.kind == WorkerEvent.ERROR:
+            msg = event.data.get("message", "ÐÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ð°Ñ Ð¾ÑˆÐ¸Ð±ÐºÐ°")
+            recoverable = event.data.get("recoverable", True)
+            self._log(f"{'ÐžÑˆÐ¸Ð±ÐºÐ° (Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð°ÐµÐ¼)' if recoverable else 'ÐšÑ€Ð¸Ñ‚Ð¸Ñ‡ÐµÑÐºÐ°Ñ Ð¾ÑˆÐ¸Ð±ÐºÐ°'}: {msg}", "error")
+            logger.error(f"Worker event ERROR: {msg} (recoverable={recoverable})")
+        elif event.kind == WorkerEvent.DONE:
+            self._set_state(AppState.IDLE)
+            self.btn_run.configure(state="normal", bg=RED, text="Ð—ÐÐŸÐ£Ð¡Ð¢Ð˜Ð¢Ð¬ ÐÐÐ Ð•Ð—ÐšÐ£")
+            self.btn_pause.configure(state="disabled")
+            logger.info("Worker Ð·Ð°Ð²ÐµÑ€ÑˆÐ¸Ð» Ð²ÑÐµ Ð·Ð°Ð´Ð°Ñ‡Ð¸")
+
+        # â”€â”€ ÐŸÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ðµ â€” Ð’Ð¸Ð´ÐµÐ¾ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    def _init_vars(self):
+        """Ð˜Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð°Ñ†Ð¸Ñ Ð²ÑÐµÑ… tkinter Ð¿ÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ñ…."""
+        self.yt_url     = tk.StringVar(value="")
+        self.out_folder = tk.StringVar(
+            value=os.path.join(os.path.expanduser("~"), "Desktop", "CLIPS"))
+
+        # â”€â”€ ÐŸÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ðµ â€” ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        self.num_clips  = tk.IntVar(value=10)
+        self.min_dur    = tk.IntVar(value=30)
+        self.max_dur    = tk.IntVar(value=60)
+        self.mode       = tk.StringVar(value="balanced")
+        self.split_dur  = tk.IntVar(value=60)
+        self.split_limit = tk.BooleanVar(value=False)
+
+        # â”€â”€ ÐŸÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ðµ â€” Ð­Ñ„Ñ„ÐµÐºÑ‚Ñ‹ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        self.opt_mirror   = tk.BooleanVar(value=False)
+        self.opt_zoom     = tk.BooleanVar(value=False)
+        self.opt_color    = tk.BooleanVar(value=False)
+        self.opt_vertical = tk.BooleanVar(value=False)
+        self.opt_subs     = tk.BooleanVar(value=False)
+        self.speed_val    = tk.StringVar(value="1x")
+        self.fx_backend   = tk.StringVar(value="gpu" if GPU.available else "cpu")
+
+        # â”€â”€ ÐŸÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ðµ â€” AI Ð°Ð½Ð°Ð»Ð¸Ð· â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        self.opt_whisper = tk.BooleanVar(value=True)
+        self.opt_laugh   = tk.BooleanVar(value=True)
+        self.opt_motion  = tk.BooleanVar(value=True)
+        self.opt_faces   = tk.BooleanVar(value=True)
+        self.w_speech    = tk.IntVar(value=3)
+        self.w_laugh     = tk.IntVar(value=2)
+        self.w_motion    = tk.IntVar(value=2)
+        self.w_faces     = tk.IntVar(value=2)
+        self.w_audio     = tk.IntVar(value=1)
+        self.keywords    = tk.StringVar(value="")
+        self.ui_expert_mode = tk.BooleanVar(value=False)
+
+        # â”€â”€ ÐŸÐµÑ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ðµ â€” ÐŸÑ€Ð¾Ð¸Ð·Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚ÑŒ (Ð‘Ð•Ð—ÐžÐŸÐÐ¡ÐÐ«Ð• Ð”Ð•Ð¤ÐžÐ›Ð¢Ð«) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        default_threads       = safe_cpu_threads(DEFAULT_CPU_THREAD_PCT)
+        self.cpu_threads      = tk.IntVar(value=default_threads)
+        self.gpu_vram_limit   = tk.IntVar(value=DEFAULT_GPU_VRAM_PCT)
+        self.temp_cpu_max     = tk.IntVar(value=DEFAULT_CPU_TEMP_MAX)
+        self.temp_gpu_max     = tk.IntVar(value=DEFAULT_GPU_TEMP_MAX)
+        self.use_gpu          = tk.BooleanVar(value=GPU.available)
+
+        # â”€â”€ ÐŸÑ€Ð¾Ð³Ñ€ÐµÑÑ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        self.progress = tk.DoubleVar(value=0)
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # ÐÐÐ¡Ð¢Ð ÐžÐ™ÐšÐ˜
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _settings_map(self):
+        return {
+            "num_clips": self.num_clips, "min_dur": self.min_dur,
+            "max_dur": self.max_dur, "mode": self.mode,
+            "split_dur": self.split_dur, "split_limit": self.split_limit,
+            "out_folder": self.out_folder, "keywords": self.keywords,
+            "opt_mirror": self.opt_mirror, "opt_zoom": self.opt_zoom,
+            "opt_color": self.opt_color, "opt_vertical": self.opt_vertical,
+            "opt_subs": self.opt_subs, "speed_val": self.speed_val,
+            "fx_backend": self.fx_backend,
+            "opt_whisper": self.opt_whisper, "opt_laugh": self.opt_laugh,
+            "opt_motion": self.opt_motion, "opt_faces": self.opt_faces,
+            "w_speech": self.w_speech, "w_laugh": self.w_laugh,
+            "w_motion": self.w_motion, "w_faces": self.w_faces,
+            "w_audio": self.w_audio, "cpu_threads": self.cpu_threads,
+            "gpu_vram_limit": self.gpu_vram_limit,
+            "temp_cpu_max": self.temp_cpu_max, "temp_gpu_max": self.temp_gpu_max,
+            "use_gpu": self.use_gpu,
+            "ui_expert_mode": self.ui_expert_mode,
+        }
+
+    def _load_settings(self) -> None:
+        try:
+            if not os.path.exists(SETTINGS_FILE): return
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                s = json.load(f)
+            loaded = 0
+            for attr, var in self._settings_map().items():
+                if attr in s:
+                    try:
+                        var.set(s[attr])
+                        loaded += 1
+                    except Exception as e:
+                        logger.debug(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÑƒ {attr}: {e}")
+            self._sanitize_safety_settings(source="load_settings")
+            logger.info(f"ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ Ð·Ð°Ð³Ñ€ÑƒÐ¶ÐµÐ½Ñ‹: {loaded} Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ð¾Ð²")
+        except Exception as e:
+            logger.warning(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ñ‚ÑŒ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸: {e}")
+
+    def _save_settings(self) -> None:
+        try:
+            s = {attr: var.get() for attr, var in self._settings_map().items()}
+            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(s, f, ensure_ascii=False, indent=2)
+            logger.info("ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ñ‹")
+        except Exception as e:
+            logger.warning(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÑŒ Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸: {e}")
+
+    def _max_safe_cpu_threads(self) -> int:
+        total = get_cpu_count()
+        cap_by_pct = max(1, math.ceil(total * Config.CPU_MAX_PCT_CAP / 100))
+        cap_by_reserve = max(1, total - Config.CPU_RESERVED_CORES)
+        return max(1, min(total, cap_by_pct, cap_by_reserve))
+
+    def _sanitize_safety_settings(self, source: str = "runtime") -> None:
+        def _to_int(value, fallback: int) -> int:
+            try:
+                return int(value)
+            except Exception:
+                return fallback
+
+        def _to_bool(value, fallback: bool) -> bool:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                v = value.strip().lower()
+                if v in ("1", "true", "yes", "on"):
+                    return True
+                if v in ("0", "false", "no", "off"):
+                    return False
+                return fallback
+            try:
+                return bool(value)
+            except Exception:
+                return fallback
+
+        def _to_backend(value, fallback: str) -> str:
+            try:
+                v = str(value).strip().lower()
+            except Exception:
+                return fallback
+            return v if v in ("cpu", "gpu") else fallback
+
+        safe_cpu = clamp(_to_int(self.cpu_threads.get(), safe_cpu_threads(DEFAULT_CPU_THREAD_PCT)), 1, self._max_safe_cpu_threads())
+        safe_vram = clamp(_to_int(self.gpu_vram_limit.get(), DEFAULT_GPU_VRAM_PCT), Config.GPU_VRAM_MIN_PCT, Config.GPU_VRAM_MAX_PCT)
+        safe_cpu_temp = clamp(_to_int(self.temp_cpu_max.get(), DEFAULT_CPU_TEMP_MAX), Config.CPU_TEMP_MIN_C, Config.CPU_TEMP_MAX_C)
+        safe_gpu_temp = clamp(_to_int(self.temp_gpu_max.get(), DEFAULT_GPU_TEMP_MAX), Config.GPU_TEMP_MIN_C, Config.GPU_TEMP_MAX_C)
+        safe_use_gpu = _to_bool(self.use_gpu.get(), GPU.available) and GPU.available
+        safe_fx_backend = _to_backend(self.fx_backend.get(), "gpu" if GPU.available else "cpu")
+        if safe_fx_backend == "gpu" and not safe_use_gpu:
+            safe_fx_backend = "cpu"
+
+        changed = (
+            safe_cpu != self.cpu_threads.get() or
+            safe_vram != self.gpu_vram_limit.get() or
+            safe_cpu_temp != self.temp_cpu_max.get() or
+            safe_gpu_temp != self.temp_gpu_max.get() or
+            safe_use_gpu != bool(self.use_gpu.get()) or
+            safe_fx_backend != str(self.fx_backend.get()).strip().lower()
+        )
+
+        self.cpu_threads.set(safe_cpu)
+        self.gpu_vram_limit.set(safe_vram)
+        self.temp_cpu_max.set(safe_cpu_temp)
+        self.temp_gpu_max.set(safe_gpu_temp)
+        self.use_gpu.set(safe_use_gpu)
+        self.fx_backend.set(safe_fx_backend)
+
+        if changed:
+            logger.warning(
+                f"Ð‘ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ñ‹Ðµ Ð»Ð¸Ð¼Ð¸Ñ‚Ñ‹ Ð¿Ñ€Ð¸Ð¼ÐµÐ½ÐµÐ½Ñ‹ ({source}): "
+                f"CPU={safe_cpu}, VRAM={safe_vram}%, CPU_temp={safe_cpu_temp}Â°C, "
+                f"GPU_temp={safe_gpu_temp}Â°C, use_gpu={safe_use_gpu}, fx_backend={safe_fx_backend}"
+            )
+
+    def _apply_cpu_limit(self) -> None:
+        """ÐŸÑ€Ð¸Ð¼ÐµÐ½ÑÐµÑ‚ Ð¾Ð³Ñ€Ð°Ð½Ð¸Ñ‡ÐµÐ½Ð¸Ðµ CPU â€” Ð¸ Ñ‡ÐµÑ€ÐµÐ· env vars Ð¸ Ñ‡ÐµÑ€ÐµÐ· affinity."""
+        self._sanitize_safety_settings(source="apply_cpu_limit")
+        threads = self.cpu_threads.get()
+        apply_cpu_limit(threads)       # OMP_NUM_THREADS Ð¸ Ñ‚.Ð´. â€” Ð´Ð»Ñ numpy/torch
+        apply_cpu_affinity(threads)    # Ñ€ÐµÐ°Ð»ÑŒÐ½Ð¾Ðµ Ð¾Ð³Ñ€Ð°Ð½Ð¸Ñ‡ÐµÐ½Ð¸Ðµ ÑÐ´ÐµÑ€ â€” Ð´Ð»Ñ FFmpeg Ñ‚Ð¾Ð¶Ðµ
+
+    def _on_close(self) -> None:
+        """Graceful shutdown â€” ÑÐ½Ð°Ñ‡Ð°Ð»Ð° Ð¾ÑÑ‚Ð°Ð½Ð°Ð²Ð»Ð¸Ð²Ð°ÐµÐ¼ worker Ð¸ Ð¿Ð¾Ñ‚Ð¾ÐºÐ¸, Ð¿Ð¾Ñ‚Ð¾Ð¼ Ð·Ð°ÐºÑ€Ñ‹Ð²Ð°ÐµÐ¼."""
+        logger.info("Ð—Ð°ÐºÑ€Ñ‹Ñ‚Ð¸Ðµ Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ...")
+        self._set_state(AppState.STOPPING)
+        self.stop_flag.set()
+        self.pause_event.set()
+        self._worker.stop()
+        self._save_settings()
+        self._cleanup_whisper()
+        GPU.clear_vram()
+        logger.info("ÐŸÑ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð·Ð°ÐºÑ€Ñ‹Ñ‚Ð¾")
+        self.destroy()
+
+    def _cleanup_whisper(self) -> None:
+        """ÐšÐ¾Ñ€Ñ€ÐµÐºÑ‚Ð½Ð¾ Ð¾ÑÐ²Ð¾Ð±Ð¾Ð¶Ð´Ð°ÐµÐ¼ Ð¿Ð°Ð¼ÑÑ‚ÑŒ Ð¿Ð¾ÑÐ»Ðµ Whisper."""
+        try:
+            if self.whisper_model is not None:
+                logger.info("Ð’Ñ‹Ð³Ñ€ÑƒÐ¶Ð°ÑŽ Whisper Ð¼Ð¾Ð´ÐµÐ»ÑŒ...")
+                del self.whisper_model
+                self.whisper_model = None
+                GPU.clear_vram()
+                logger.info("Whisper Ð²Ñ‹Ð³Ñ€ÑƒÐ¶ÐµÐ½, VRAM Ð¾Ñ‡Ð¸Ñ‰ÐµÐ½")
+        except Exception as e:
+            logger.warning(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¿Ñ€Ð¸ Ð²Ñ‹Ð³Ñ€ÑƒÐ·ÐºÐµ Whisper: {e}")
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # ÐœÐžÐÐ˜Ð¢ÐžÐ Ð˜ÐÐ“ Ð¢Ð•ÐœÐŸÐ•Ð ÐÐ¢Ð£Ð Ð« Ð˜ VRAM
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _monitor_loop(self):
+        """ÐžÐ±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ Ð¸Ð½Ð´Ð¸ÐºÐ°Ñ‚Ð¾Ñ€Ñ‹ ÐºÐ°Ð¶Ð´Ñ‹Ðµ 2 ÑÐµÐºÑƒÐ½Ð´Ñ‹."""
+        try:
+            temp = GPU.temperature()
+            vram_used = GPU.vram_used_mb()
+            vram_pct  = GPU.vram_pct_used()
+
+            if temp is not None:
+                limit = self.temp_gpu_max.get()
+                if temp >= limit:
+                    color = DANGER
+                elif temp >= limit - 10:
+                    color = WARN
+                else:
+                    color = SUCCESS
+                self.lbl_gpu_temp.configure(text=f"GPU {temp}Â°C", fg=color)
+            else:
+                self.lbl_gpu_temp.configure(text="GPU --Â°C", fg=TEXT_DIM)
+
+            if vram_used is not None and GPU.vram_total > 0:
+                vram_limit = self.gpu_vram_limit.get()
+                vram_color = DANGER if (vram_pct or 0) >= vram_limit else TEXT_MED
+                self.lbl_vram.configure(
+                    text=f"VRAM {vram_used}MB / {GPU.vram_total}MB ({vram_pct}%)",
+                    fg=vram_color)
+            else:
+                self.lbl_vram.configure(text="VRAM --", fg=TEXT_DIM)
+
+            cpu_t = self._read_cpu_temp()
+            if hasattr(self, 'lbl_cpu_temp'):
+                if cpu_t is not None:
+                    cpu_limit = self.temp_cpu_max.get()
+                    cpu_color = DANGER if cpu_t >= cpu_limit else (WARN if cpu_t >= cpu_limit - 10 else SUCCESS)
+                    self.lbl_cpu_temp.configure(text=f"CPU {cpu_t:.0f}Â°C", fg=cpu_color)
+                else:
+                    self.lbl_cpu_temp.configure(text="CPU --Â°C", fg=TEXT_DIM)
+        except Exception as e:
+            logger.debug(f"_monitor_loop error: {e}")
+        self.after(TEMP_CHECK_INTERVAL * 1000, self._monitor_loop)
+
+    def _read_cpu_temp(self) -> Optional[float]:
+        """ÐŸÑ‹Ñ‚Ð°ÐµÑ‚ÑÑ Ð¿Ð¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñƒ CPU Ñ‡ÐµÑ€ÐµÐ· psutil Ñ fallback Ð¿Ð¾ Ñ€Ð°Ð·Ð½Ñ‹Ð¼ ÑÐµÐ½ÑÐ¾Ñ€Ð°Ð¼."""
+        try:
+            import psutil
+            temps = psutil.sensors_temperatures() or {}
+        except Exception as e:
+            logger.debug(f"_read_cpu_temp: psutil sensor error: {e}")
+            return self._read_cpu_temp_windows_acpi()
+
+        if not temps:
+            return self._read_cpu_temp_windows_acpi()
+
+        # ÐŸÑ€Ð¸Ð¾Ñ€Ð¸Ñ‚ÐµÑ‚Ð½Ñ‹Ðµ Ð´Ð°Ñ‚Ñ‡Ð¸ÐºÐ¸ CPU Ð½Ð° Ð¿Ð¾Ð¿ÑƒÐ»ÑÑ€Ð½Ñ‹Ñ… Ð¿Ð»Ð°Ñ‚Ñ„Ð¾Ñ€Ð¼Ð°Ñ…
+        for key in ("coretemp", "k10temp", "cpu_thermal", "acpitz", "cpu-thermal", "zenpower"):
+            entries = temps.get(key) or []
+            vals = [getattr(t, "current", None) for t in entries]
+            vals = [v for v in vals if v is not None]
+            if vals:
+                return float(max(vals))
+
+        # Fallback: Ð¸Ñ‰ÐµÐ¼ CPU-Ð¿Ð¾Ñ…Ð¾Ð¶Ð¸Ðµ Ð¼ÐµÑ‚ÐºÐ¸/Ñ‡Ð¸Ð¿Ñ‹
+        candidates = []
+        for chip, entries in temps.items():
+            chip_name = (chip or "").lower()
+            for t in entries:
+                cur = getattr(t, "current", None)
+                if cur is None:
+                    continue
+                label = (getattr(t, "label", "") or "").lower()
+                if any(k in label for k in ("cpu", "package", "tctl", "core", "ccd")) or \
+                   any(k in chip_name for k in ("cpu", "coretemp", "k10temp", "zenpower", "acpi")):
+                    candidates.append(float(cur))
+        if candidates:
+            return max(candidates)
+
+        return self._read_cpu_temp_windows_acpi()
+
+    def _read_cpu_temp_windows_acpi(self) -> Optional[float]:
+        """
+        Fallback Ð´Ð»Ñ Windows: Ð¿Ñ€Ð¾Ð±ÑƒÐµÐ¼ ACPI-Ð´Ð°Ñ‚Ñ‡Ð¸Ðº Ñ‡ÐµÑ€ÐµÐ· WMI (Ð±ÐµÐ· Ð²Ð½ÐµÑˆÐ½Ð¸Ñ… Ð±Ð¸Ð±Ð»Ð¸Ð¾Ñ‚ÐµÐº).
+        Ð’Ð°Ð¶Ð½Ð¾: Ð½Ð° Ñ‡Ð°ÑÑ‚Ð¸ Ð½Ð¾ÑƒÑ‚Ð±ÑƒÐºÐ¾Ð² ÑÑ‚Ð¾Ñ‚ Ð¸ÑÑ‚Ð¾Ñ‡Ð½Ð¸Ðº Ð¿ÑƒÑÑ‚Ð¾Ð¹ Ð¸Ð»Ð¸ Ð½ÐµÑ‚Ð¾Ñ‡Ð½Ñ‹Ð¹.
+        """
+        if platform.system() != "Windows":
+            return None
+
+        now = time.time()
+        if (now - self._cpu_temp_fallback_ts) < 5.0:
+            return self._cpu_temp_fallback_cache
+
+        self._cpu_temp_fallback_ts = now
+        self._cpu_temp_fallback_cache = None
+
+        ps_cmd = (
+            "(Get-CimInstance -Namespace root/wmi -ClassName "
+            "MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | "
+            "Select-Object -ExpandProperty CurrentTemperature) -join ','"
+        )
+        try:
+            res = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                capture_output=True, text=True, timeout=2, creationflags=NO_WINDOW
+            )
+            if res.returncode != 0:
+                return None
+
+            raw = (res.stdout or "").strip()
+            if not raw:
+                return None
+
+            vals = []
+            for token in raw.replace("\r", "\n").replace(",", "\n").split():
+                try:
+                    celsius = (float(token) / 10.0) - 273.15
+                except Exception:
+                    continue
+                if 1.0 <= celsius <= 130.0:
+                    vals.append(celsius)
+
+            if vals:
+                self._cpu_temp_fallback_cache = max(vals)
+        except Exception as e:
+            logger.debug(f"_read_cpu_temp_windows_acpi error: {e}")
+
+        return self._cpu_temp_fallback_cache
+
+    def _cpu_load_limit_by_temp_setting(self) -> int:
+        """
+        Fallback-Ð»Ð¸Ð¼Ð¸Ñ‚ CPU, ÐµÑÐ»Ð¸ Ð´Ð°Ñ‚Ñ‡Ð¸Ðº Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½.
+        Ð§ÐµÐ¼ Ð½Ð¸Ð¶Ðµ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÑŒÑÐºÐ¸Ð¹ Ð¿Ð¾Ñ€Ð¾Ð³ Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹, Ñ‚ÐµÐ¼ Ð½Ð¸Ð¶Ðµ Ð´Ð¾Ð¿ÑƒÑÑ‚Ð¸Ð¼Ð°Ñ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° CPU.
+        """
+        try:
+            temp_limit = int(self.temp_cpu_max.get())
+        except Exception:
+            temp_limit = DEFAULT_CPU_TEMP_MAX
+        temp_limit = clamp(temp_limit, Config.CPU_TEMP_MIN_C, Config.CPU_TEMP_MAX_C)
+        # 60Â°C -> ~45%, 70Â°C -> ~55%, 80Â°C -> ~65%, 90Â°C -> ~75%
+        return clamp(temp_limit - 15, 45, 75)
+
+    def _gpu_load_limit_by_temp_setting(self) -> int:
+        """
+        Fallback-Ð»Ð¸Ð¼Ð¸Ñ‚ GPU Ð¿Ð¾ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐµ, ÐµÑÐ»Ð¸ Ð´Ð°Ñ‚Ñ‡Ð¸Ðº Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹ GPU Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½.
+        Ð§ÐµÐ¼ Ð½Ð¸Ð¶Ðµ Ð¿Ð¾Ñ€Ð¾Ð³ Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹ GPU, Ñ‚ÐµÐ¼ Ð½Ð¸Ð¶Ðµ Ð´Ð¾Ð¿ÑƒÑÑ‚Ð¸Ð¼Ð°Ñ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° GPU.
+        """
+        try:
+            temp_limit = int(self.temp_gpu_max.get())
+        except Exception:
+            temp_limit = DEFAULT_GPU_TEMP_MAX
+        temp_limit = clamp(temp_limit, Config.GPU_TEMP_MIN_C, Config.GPU_TEMP_MAX_C)
+        # 60Â°C -> ~50%, 70Â°C -> ~60%, 75Â°C -> ~65%, 85Â°C -> ~75%
+        return clamp(temp_limit - 10, 50, 80)
+
+    def _find_face_task_model_path(self) -> Optional[str]:
+        """Ð˜Ñ‰ÐµÑ‚ Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð´Ð»Ñ MediaPipe Tasks FaceDetector Ñ€ÑÐ´Ð¾Ð¼ Ñ Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼."""
+        base = os.path.dirname(os.path.abspath(__file__))
+        candidates = []
+        for name in Config.FACE_TASK_MODELS:
+            candidates.append(os.path.join(base, name))
+            candidates.append(os.path.join(base, "models", name))
+            candidates.append(os.path.join(base, "assets", name))
+        for p in candidates:
+            if os.path.exists(p):
+                return p
+        return None
+
+    def _find_face_gpu_model_path(self) -> Optional[str]:
+        """Ð˜Ñ‰ÐµÑ‚ ONNX-Ð¼Ð¾Ð´ÐµÐ»ÑŒ YuNet Ð´Ð»Ñ GPU-Ð´ÐµÑ‚ÐµÐºÑ‚Ð¾Ñ€Ð° Ð»Ð¸Ñ† (OpenCV DNN CUDA)."""
+        base = os.path.dirname(os.path.abspath(__file__))
+        candidates = []
+        for name in Config.FACE_GPU_MODELS:
+            candidates.append(os.path.join(base, name))
+            candidates.append(os.path.join(base, "models", name))
+            candidates.append(os.path.join(base, "assets", name))
+        for p in candidates:
+            if os.path.exists(p):
+                return p
+        return None
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # Ð¢Ð•ÐœÐŸÐ•Ð ÐÐ¢Ð£Ð ÐÐ«Ð™ ÐŸÐ Ð•Ð”ÐžÐ¥Ð ÐÐÐ˜Ð¢Ð•Ð›Ð¬
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _wait_for_cool(self, get_temp_fn: Callable, limit: int, name: str, timeout: int = Config.TEMP_TIMEOUT) -> None:
+        """
+        Ð£Ð½Ð¸Ð²ÐµÑ€ÑÐ°Ð»ÑŒÐ½Ð¾Ðµ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ðµ Ð¾Ñ…Ð»Ð°Ð¶Ð´ÐµÐ½Ð¸Ñ Ñ Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚Ð¾Ð¼.
+        timeout â€” Ð¼Ð°ÐºÑÐ¸Ð¼ÑƒÐ¼ ÑÐµÐºÑƒÐ½Ð´ Ð¾Ð¶Ð¸Ð´Ð°Ð½Ð¸Ñ (Ð´ÐµÑ„Ð¾Ð»Ñ‚ 5 Ð¼Ð¸Ð½ÑƒÑ‚).
+        Ð•ÑÐ»Ð¸ Ð´Ð°Ñ‚Ñ‡Ð¸Ðº Ð·Ð°Ð²Ð¸Ñ Ð¸Ð»Ð¸ Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚ Ð¸ÑÑ‚Ñ‘Ðº â€” Ð¿Ñ€Ð¾ÑÑ‚Ð¾ Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð°ÐµÐ¼.
+        """
+        if self.stop_flag.is_set():
+            return
+        cool_target = limit - Config.TEMP_COOLDOWN
+        start = time.time()
+        while time.time() - start < timeout:
+            if self.stop_flag.is_set():
+                return
+            if not self._wait_if_paused():
+                return
+            time.sleep(3)
+            try:
+                t = get_temp_fn()
+            except Exception as e:
+                logger.warning(f"Ð”Ð°Ñ‚Ñ‡Ð¸Ðº {name} ÑƒÐ¿Ð°Ð»: {e} â€” Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð°ÐµÐ¼")
+                break
+            if t is None or t <= cool_target:
+                msg = f"âœ… {name} Ð¾ÑÑ‚Ñ‹Ð» Ð´Ð¾ {t}Â°C â€” Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð°ÐµÐ¼"
+                self._safe_log(msg, "success")
+                logger.info(msg)
+                return
+            msg = f"ï¸ Ð–Ð´Ñƒ... {name} {t}Â°C (Ñ†ÐµÐ»ÑŒ â‰¤ {cool_target}Â°C)"
+            self._safe_log(msg, "warn")
+            logger.info(msg)
+        msg = f"âš ï¸ {name} Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚ Ð¾Ñ…Ð»Ð°Ð¶Ð´ÐµÐ½Ð¸Ñ ({timeout}Ñ) â€” Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð°ÐµÐ¼ Ð¿Ñ€Ð¸Ð½ÑƒÐ´Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾"
+        self._safe_log(msg, "warn")
+        logger.warning(msg)
+
+    def _check_and_wait_temp(self) -> None:
+        """
+        ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñƒ GPU Ð¸ CPU.
+        Ð•ÑÐ»Ð¸ Ð¿Ñ€ÐµÐ²Ñ‹ÑˆÐµÐ½ Ð¿Ð¾Ñ€Ð¾Ð³ â€” Ð¶Ð´Ñ‘Ð¼ Ð¾Ñ…Ð»Ð°Ð¶Ð´ÐµÐ½Ð¸Ñ (Ð¼Ð°ÐºÑÐ¸Ð¼ÑƒÐ¼ 5 Ð¼Ð¸Ð½ÑƒÑ‚).
+        Ð•ÑÐ»Ð¸ Ð´Ð°Ñ‚Ñ‡Ð¸Ðº Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹ GPU Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ â€” Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ fallback Ð¿Ð¾ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐµ GPU.
+        Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ÑÑ Ð¸Ð· Ñ€Ð°Ð±Ð¾Ñ‡ÐµÐ³Ð¾ Ð¿Ð¾Ñ‚Ð¾ÐºÐ° â€” Ð½Ðµ Ð±Ð»Ð¾ÐºÐ¸Ñ€ÑƒÐµÑ‚ UI.
+        """
+        if self.stop_flag.is_set():
+            return
+
+        # ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° GPU
+        try:
+            gpu_temp  = GPU.temperature()
+            gpu_limit = self.temp_gpu_max.get()
+            if gpu_temp is not None and gpu_temp >= gpu_limit:
+                msg = f"ï¸ GPU {gpu_temp}Â°C â‰¥ {gpu_limit}Â°C â€” Ð¿Ð°ÑƒÐ·Ð° Ð´Ð»Ñ Ð¾Ñ…Ð»Ð°Ð¶Ð´ÐµÐ½Ð¸Ñ..."
+                self._safe_log(msg, "warn")
+                logger.warning(msg)
+                self._wait_for_cool(GPU.temperature, gpu_limit, "GPU")
+            elif gpu_temp is None and GPU.available and bool(self.use_gpu.get()):
+                if not self._warned_no_gpu_temp_sensor:
+                    self._warned_no_gpu_temp_sensor = True
+                    msg = ("âš ï¸ Ð”Ð°Ñ‚Ñ‡Ð¸Ðº Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹ GPU Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ â€” "
+                           "Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÑŽ Ð¾Ð³Ñ€Ð°Ð½Ð¸Ñ‡ÐµÐ½Ð¸Ðµ Ð¿Ð¾ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐµ GPU")
+                    self._safe_log(msg, "warn")
+                    logger.warning(msg)
+                self.control_gpu_load(max_gpu=self._gpu_load_limit_by_temp_setting())
+        except Exception as e:
+            logger.debug(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ¸ Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹ GPU: {e}")
+
+        # ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° CPU
+        try:
+            cpu_limit = self.temp_cpu_max.get()
+            cpu_temp = self._read_cpu_temp()
+            if cpu_temp is None:
+                if not self._warned_no_cpu_temp_sensor:
+                    self._warned_no_cpu_temp_sensor = True
+                    msg = ("âš ï¸ Ð”Ð°Ñ‚Ñ‡Ð¸Ðº Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹ CPU Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ â€” "
+                           "Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÑŽ Ð¾Ð³Ñ€Ð°Ð½Ð¸Ñ‡ÐµÐ½Ð¸Ðµ Ð¿Ð¾ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐµ CPU")
+                    self._safe_log(msg, "warn")
+                    logger.warning(msg)
+                self.control_load(max_cpu=self._cpu_load_limit_by_temp_setting())
+                return
+            if cpu_temp >= cpu_limit:
+                msg = f"ï¸ CPU {cpu_temp:.0f}Â°C â‰¥ {cpu_limit}Â°C â€” Ð¿Ð°ÑƒÐ·Ð°..."
+                self._safe_log(msg, "warn")
+                logger.warning(msg)
+                self._wait_for_cool(self._read_cpu_temp, cpu_limit, "CPU")
+        except Exception as e:
+            logger.debug(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ¸ Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹ CPU: {e}")
+
+    def control_load(self, max_cpu: int = 75) -> None:
+        """
+        Ð•Ð”Ð˜ÐÐÐ¯ ÑÐ¸ÑÑ‚ÐµÐ¼Ð° ÐºÐ¾Ð½Ñ‚Ñ€Ð¾Ð»Ñ Ð½Ð°Ð³Ñ€ÑƒÐ·ÐºÐ¸ â€” Ð·Ð°Ð¼ÐµÐ½ÑÐµÑ‚ Ð²ÑÐµ _throttle Ð²Ñ‹Ð·Ð¾Ð²Ñ‹.
+        ÐÐ´Ð°Ð¿Ñ‚Ð¸Ð²Ð½Ð°Ñ: ÐµÑÐ»Ð¸ CPU < 60% â€” Ð½Ðµ Ð¶Ð´Ñ‘Ð¼, ÐµÑÐ»Ð¸ > 80% â€” Ð¶Ð´Ñ‘Ð¼ Ð´Ð¾Ð»ÑŒÑˆÐµ.
+        Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÑŒ Ð²ÐµÐ·Ð´Ðµ Ð²Ð¼ÐµÑÑ‚Ð¾ _throttle().
+        """
+        if self.stop_flag.is_set():
+            return
+        max_cpu = int(clamp(max_cpu, 35, 95))
+        max_cpu = min(max_cpu, self._cpu_load_limit_by_temp_setting())
+        try:
+            import psutil
+            # Ð§Ð¸Ñ‚Ð°ÐµÐ¼ Ñ€ÐµÐ°Ð»ÑŒÐ½Ñ‹Ð¹ CPU
+            cpu = psutil.cpu_percent(interval=0.4)
+            soft_limit = max(25, max_cpu - 10)
+
+            if cpu <= soft_limit:
+                # ÐÐ°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð½Ð¸Ð·ÐºÐ°Ñ â€” Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð°ÐµÐ¼
+                return
+            if cpu <= max_cpu:
+                # ÐÐ°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð±Ð»Ð¸Ð·ÐºÐ° Ðº Ð»Ð¸Ð¼Ð¸Ñ‚Ñƒ â€” ÐºÐ¾Ñ€Ð¾Ñ‚ÐºÐ°Ñ Ð¿Ð°ÑƒÐ·Ð°
+                if not self._wait_if_paused():
+                    return
+                time.sleep(0.2)
+                return
+
+            # Ð’Ñ‹ÑÐ¾ÐºÐ°Ñ Ð½Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° â€” Ð¶Ð´Ñ‘Ð¼ Ð¿Ð¾ÐºÐ° Ð½Ðµ ÑƒÐ¿Ð°Ð´Ñ‘Ñ‚ Ð½Ð¸Ð¶Ðµ max_cpu
+            logger.debug(f"control_load: CPU {cpu:.0f}% > {max_cpu}% â€” Ð¶Ð´Ñƒ...")
+            deadline = time.time() + 30  # Ð¼Ð°ÐºÑÐ¸Ð¼ÑƒÐ¼ 30 ÑÐµÐºÑƒÐ½Ð´ Ð¶Ð´Ñ‘Ð¼
+            while time.time() < deadline:
+                if self.stop_flag.is_set():
+                    return
+                if not self._wait_if_paused():
+                    return
+                time.sleep(0.2)
+                cpu = psutil.cpu_percent(interval=0.4)
+                if cpu <= max_cpu:
+                    break
+        except ImportError:
+            # psutil Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ â€” Ð±Ð°Ð·Ð¾Ð²Ð°Ñ Ð¿Ð°ÑƒÐ·Ð°
+            time.sleep(0.3)
+        except Exception as e:
+            logger.debug(f"control_load Ð¾ÑˆÐ¸Ð±ÐºÐ°: {e}")
+            time.sleep(0.3)
+
+    def control_gpu_load(self, max_gpu: int = 75) -> None:
+        """
+        ÐœÑÐ³ÐºÐ¸Ð¹ runtime-Ð»Ð¸Ð¼Ð¸Ñ‚ÐµÑ€ Ð¿Ð¾ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐµ GPU (fallback, ÐºÐ¾Ð³Ð´Ð° Ð½ÐµÑ‚ Ð´Ð°Ñ‚Ñ‡Ð¸ÐºÐ° Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ñ‹ GPU).
+        ÐÐµ Ð±Ð»Ð¾ÐºÐ¸Ñ€ÑƒÐµÑ‚ Ð½Ð°Ð´Ð¾Ð»Ð³Ð¾: Ð¶Ð´Ñ‘Ñ‚ Ð¼Ð°ÐºÑÐ¸Ð¼ÑƒÐ¼ Ð¾ÐºÐ¾Ð»Ð¾ 20 ÑÐµÐºÑƒÐ½Ð´.
+        """
+        if self.stop_flag.is_set():
+            return
+        if not GPU.available or not bool(self.use_gpu.get()):
+            return
+        max_gpu = int(clamp(max_gpu, 40, 95))
+        try:
+            util = GPU.utilization_pct()
+            if util is None or util <= max_gpu:
+                return
+            logger.debug(f"control_gpu_load: GPU {util:.0f}% > {max_gpu}% â€” Ð¶Ð´Ñƒ...")
+            deadline = time.time() + 20
+            while time.time() < deadline:
+                if self.stop_flag.is_set():
+                    return
+                if not self._wait_if_paused():
+                    return
+                time.sleep(0.25)
+                util = GPU.utilization_pct()
+                if util is None or util <= max_gpu:
+                    return
+        except Exception as e:
+            logger.debug(f"control_gpu_load Ð¾ÑˆÐ¸Ð±ÐºÐ°: {e}")
+
+    def _throttle(self):
+        """ÐžÐ±Ñ‘Ñ€Ñ‚ÐºÐ° Ð´Ð»Ñ ÑÐ¾Ð²Ð¼ÐµÑÑ‚Ð¸Ð¼Ð¾ÑÑ‚Ð¸ â€” Ð²Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ control_load."""
+        self.control_load(max_cpu=self._cpu_load_limit_by_temp_setting())
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # VRAM Ð—ÐÐ©Ð˜Ð¢Ð
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _check_vram(self, model_mb: int, model_name: str = "Ð¼Ð¾Ð´ÐµÐ»ÑŒ") -> str:
+        """
+        ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÑ‚ Ñ…Ð²Ð°Ñ‚Ð°ÐµÑ‚ Ð»Ð¸ VRAM Ð´Ð»Ñ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ¸ Ð¼Ð¾Ð´ÐµÐ»Ð¸ Ñ ÑƒÑ‡Ñ‘Ñ‚Ð¾Ð¼ Ð»Ð¸Ð¼Ð¸Ñ‚Ð°.
+        Ð’Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ device: "cuda" Ð¸Ð»Ð¸ "cpu".
+        """
+        if not GPU.available or not self.use_gpu.get():
+            return "cpu"
+        limit_pct = self.gpu_vram_limit.get()
+        if GPU.can_fit_model(model_mb, limit_pct):
+            logger.info(f"{model_name}: Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ GPU (CUDA)")
+            return "cuda"
+        else:
+            free    = GPU.vram_free_mb() or 0
+            allowed = int(GPU.vram_total * limit_pct / 100)
+            msg = (f"âš ï¸ {model_name}: Ð½ÐµÑ‚ VRAM (Ð½ÑƒÐ¶Ð½Ð¾ ~{model_mb}MB, "
+                   f"Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾ {free}MB Ð¸Ð· Ð»Ð¸Ð¼Ð¸Ñ‚Ð° {allowed}MB) â€” Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°ÑŽ Ð½Ð° CPU")
+            self._safe_log(msg, "warn")
+            logger.warning(msg)
+            return "cpu"
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # Ð’Ð¡ÐŸÐžÐœÐžÐ“ÐÐ¢Ð•Ð›Ð¬ÐÐ«Ð• UI ÐœÐ•Ð¢ÐžÐ”Ð«
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _safe_log(self, msg: str, tag: str = "info") -> None:
+        self.after(0, lambda: self._log(msg, tag))
+
+    def _safe_progress(self, val: float, text: str = "") -> None:
+        self.after(0, lambda: self._set_progress(val, text))
+
+    def _log(self, msg: str, tag: str = "info") -> None:
+        self.log.configure(state="normal")
+        self.log.insert("end", msg + "\n", tag)
+        self.log.see("end")
+        self.log.configure(state="disabled")
+
+    def _set_progress(self, val: float, text: str = "") -> None:
+        self.progress.set(val)
+        self.lbl_progress.configure(text=text)
+
+    def _wait_if_paused(self) -> bool:
+        """
+        Ð‘Ð»Ð¾ÐºÐ¸Ñ€ÑƒÐµÑ‚ Ñ€Ð°Ð±Ð¾Ñ‡Ð¸Ð¹ Ð¿Ð¾Ñ‚Ð¾Ðº Ð¿Ð¾ÐºÐ° Ð½Ð°Ð¶Ð°Ñ‚Ð° Ð¿Ð°ÑƒÐ·Ð°.
+        Ð’Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ False ÐµÑÐ»Ð¸ Ð½ÑƒÐ¶Ð½Ð¾ Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒÑÑ (stop_flag).
+        """
+        return self._worker.wait_if_paused()
+
+    def _grad_line(self, parent, height=2):
+        # Ð›ÐµÐ½Ñ‚Ð° Ð² ÑÑ‚Ð¸Ð»Ðµ Creator Studio: Ñ‚Ñ‘Ð¿Ð»Ñ‹Ð¹ Ð°ÐºÑ†ÐµÐ½Ñ‚ + Ñ…Ð¾Ð»Ð¾Ð´Ð½Ð°Ñ Ð¿Ð¾Ð´Ð»Ð¾Ð¶ÐºÐ°
+        line = tk.Frame(parent, bg=BG)
+        line.pack(fill="x")
+        tk.Frame(line, height=1, bg=RED2).pack(fill="x")
+        if height > 1:
+            tk.Frame(line, height=max(1, height - 1), bg=BG4).pack(fill="x")
+        return line
+
+    def _card(self, parent, title, icon=""):
+        outer = tk.Frame(parent, bg=BORDER, padx=1, pady=1)
+        outer.pack(fill="x", pady=(0, 14))
+        shell = tk.Frame(outer, bg=BG2)
+        shell.pack(fill="x")
+        tk.Frame(shell, bg=PURPLE, height=2).pack(fill="x")
+        hdr = tk.Frame(shell, bg=BG2, padx=14, pady=10)
+        hdr.pack(fill="x")
+        t = f"{icon}  {title.upper()}" if icon else title.upper()
+        tk.Label(hdr, text=t, font=FONT_LABEL, bg=BG2, fg=TEXT).pack(side="left")
+        tk.Label(hdr, text="CREATOR STUDIO", font=FONT_SMALL, bg=BG2, fg=TEXT_DIM).pack(side="right")
+        tk.Frame(shell, bg=BORDER, height=1).pack(fill="x")
+        body = tk.Frame(shell, bg=BG2, padx=14, pady=12)
+        body.pack(fill="x")
+        body.columnconfigure(0, weight=1)
+        return body
+
+    def _btn(self, parent, text, cmd, bg=BG3, fg=TEXT, **kw):
+        return tk.Button(parent, text=text, command=cmd, bg=bg, fg=fg,
+                         font=FONT_BTN, bd=0, padx=14, pady=8, relief="flat",
+                         activebackground=PURPLE2, activeforeground=BG,
+                         highlightthickness=1, highlightbackground=BORDER, highlightcolor=PURPLE2,
+                         cursor="hand2", **kw)
+
+    def _scrollable(self, parent):
+        # ÐŸÑ€Ð¾ÑÑ‚Ð¾Ð¹ Frame Ð²Ð¼ÐµÑÑ‚Ð¾ Canvas+Scrollbar â€” ÑƒÐ±Ð¸Ñ€Ð°ÐµÑ‚ Ñ‡Ñ‘Ñ€Ð½Ñ‹Ð¹ ÑÐºÑ€Ð°Ð½ Ð½Ð° Windows
+        wrap = tk.Frame(parent, bg=BG)
+        wrap.pack(fill="both", expand=True)
+        wrap.columnconfigure(0, weight=1)
+        pad = tk.Frame(wrap, bg=BG, padx=24, pady=18)
+        pad.pack(fill="both", expand=True)
+        pad.columnconfigure((0, 1), weight=1)
+        return pad
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # ÐŸÐžÐ¡Ð¢Ð ÐžÐ•ÐÐ˜Ð• UI
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _build_ui(self):
+        root = tk.Frame(self, bg=BG); root.grid(row=0, column=0, sticky="nsew")
+        root.columnconfigure(0, weight=1); root.rowconfigure(2, weight=1)
+
+        self._grad_line(root, height=3)
+        self._build_header(root)
+        self._grad_line(root, height=1)
+
+        self._tab_defs = [
+            ("video",    "Ð’Ð˜Ð”Ð•Ðž"),
+            ("settings", "ÐÐÐ¡Ð¢Ð ÐžÐ™ÐšÐ˜"),
+            ("effects",  "Ð­Ð¤Ð¤Ð•ÐšÐ¢Ð«"),
+            ("ai",       "ÐÐÐÐ›Ð˜Ð—"),
+            ("perf",     "ÐŸÐ ÐžÐ˜Ð—Ð’ÐžÐ”Ð˜Ð¢Ð•Ð›Ð¬ÐÐžÐ¡Ð¢Ð¬"),
+        ]
+        self.tabbar = TabBar(root, self._tab_defs, self._on_tab_change)
+        self.tabbar.pack(fill="x")
+        tk.Frame(root, bg=BORDER, height=1).pack(fill="x")
+
+        self.tab_container = tk.Frame(root, bg=BG)
+        self.tab_container.pack(fill="both", expand=True)
+        self.tab_container.columnconfigure(0, weight=1)
+        self.tab_container.rowconfigure(0, weight=1)
+
+        self.tabs = {}
+        for key, _ in self._tab_defs:
+            f = tk.Frame(self.tab_container, bg=BG)
+            f.grid(row=0, column=0, sticky="nsew")
+            self.tabs[key] = f
+
+        self._build_tab_video(self.tabs["video"])
+        print(">>> tab_video OK", flush=True)
+        self._build_tab_settings(self.tabs["settings"])
+        print(">>> tab_settings OK", flush=True)
+        self._build_tab_effects(self.tabs["effects"])
+        print(">>> tab_effects OK", flush=True)
+        self._build_tab_ai(self.tabs["ai"])
+        print(">>> tab_ai OK", flush=True)
+        self._build_tab_perf(self.tabs["perf"])
+        print(">>> tab_perf OK", flush=True)
+        self._build_bottom(root)
+        print(">>> bottom OK", flush=True)
+        self.ui_expert_mode.trace_add("write", lambda *a: self._apply_ui_mode())
+        self._apply_ui_mode()
+        print(">>> _build_ui Ð—ÐÐ’Ð•Ð Ð¨ÐÐ", flush=True)
+
+    # â”€â”€ Ð¨Ð°Ð¿ÐºÐ° â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    def _build_header(self, parent):
+        hdr = tk.Frame(parent, bg=BG, padx=22, pady=12)
+        hdr.pack(fill="x")
+        hdr.columnconfigure(1, weight=1)
+
+        left = tk.Frame(hdr, bg=BG)
+        left.grid(row=0, column=0, sticky="w")
+        self.lbl_title = tk.Label(left, text="CLIP AI",
+                                  font=("Bahnschrift SemiBold", 24), bg=BG, fg=RED2)
+        self.lbl_title.pack(side="left")
+        tk.Label(left, text="  v2.0  creator studio",
+                 font=("Segoe UI Semibold", 10), bg=BG, fg=TEXT_DIM).pack(side="left", pady=(6, 0))
+
+        mode_wrap = tk.Frame(left, bg=BG)
+        mode_wrap.pack(side="left", padx=(14, 0), pady=(6, 0))
+        self.btn_ui_mode = tk.Button(
+            mode_wrap, text="", command=self._toggle_ui_mode,
+            font=FONT_SMALL, bg=BG3, fg=SUCCESS, bd=0, padx=10, pady=4,
+            activebackground=BG4, activeforeground=TEXT,
+            highlightthickness=1, highlightbackground=BORDER, highlightcolor=PURPLE2,
+            cursor="hand2", relief="flat"
+        )
+        self.btn_ui_mode.pack(anchor="w")
+        self.lbl_ui_mode_hint = tk.Label(mode_wrap, text="", font=FONT_SMALL, bg=BG, fg=TEXT_DIM)
+        self.lbl_ui_mode_hint.pack(anchor="w")
+        self._refresh_ui_mode_widgets()
+
+        right_outer = tk.Frame(hdr, bg=BORDER, padx=1, pady=1)
+        right_outer.grid(row=0, column=2, sticky="e")
+        right = tk.Frame(right_outer, bg=BG3, padx=12, pady=7)
+        right.pack(fill="both", expand=True)
+
+        if GPU.available:
+            tk.Label(right, text=f" {GPU.short_name()}",
+                     font=FONT_SMALL, bg=BG3, fg=SUCCESS).pack(anchor="e")
+        else:
+            tk.Label(right, text="GPU unavailable",
+                     font=FONT_SMALL, bg=BG3, fg=WARN).pack(anchor="e")
+
+        self.lbl_cpu_temp = tk.Label(right, text="CPU --Â°C",
+                                     font=FONT_SMALL, bg=BG3, fg=TEXT_DIM)
+        self.lbl_cpu_temp.pack(anchor="e")
+        self.lbl_gpu_temp = tk.Label(right, text="GPU --Â°C",
+                                     font=FONT_SMALL, bg=BG3, fg=TEXT_DIM)
+        self.lbl_gpu_temp.pack(anchor="e")
+        self.lbl_vram = tk.Label(right, text="VRAM --",
+                                 font=FONT_SMALL, bg=BG3, fg=TEXT_DIM)
+        self.lbl_vram.pack(anchor="e")
+
+        colors = [RED2, PURPLE2, PINK, PURPLE2, RED2]
+        idx = [0]
+
+        def anim():
+            try:
+                self.lbl_title.configure(fg=colors[idx[0] % len(colors)])
+                idx[0] += 1
+                self.after(1100, anim)
+            except Exception as e:
+                logger.debug(f"Title animation stopped: {e}")
+
+        self.after(1100, anim)
+
+    def _visible_tab_keys(self) -> List[str]:
+        if bool(self.ui_expert_mode.get()):
+            return ["video", "settings", "effects", "ai", "perf"]
+        return ["video", "settings", "perf"]
+
+    def _toggle_ui_mode(self):
+        self.ui_expert_mode.set(not bool(self.ui_expert_mode.get()))
+
+    def _refresh_ui_mode_widgets(self):
+        expert = bool(self.ui_expert_mode.get())
+        if hasattr(self, "btn_ui_mode"):
+            self.btn_ui_mode.configure(
+                text="UI: Ð Ð°ÑÑˆÐ¸Ñ€ÐµÐ½Ð½Ñ‹Ð¹" if expert else "UI: ÐŸÑ€Ð¾ÑÑ‚Ð¾Ð¹",
+                fg=PURPLE2 if expert else SUCCESS,
+            )
+        if hasattr(self, "lbl_ui_mode_hint"):
+            self.lbl_ui_mode_hint.configure(
+                text="Ð’ÑÐµ Ð²ÐºÐ»Ð°Ð´ÐºÐ¸ Ð´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ñ‹" if expert else "Ð¡ÐºÑ€Ñ‹Ñ‚Ñ‹ Ð­Ñ„Ñ„ÐµÐºÑ‚Ñ‹ Ð¸ ÐÐ½Ð°Ð»Ð¸Ð·",
+            )
+        if hasattr(self, "btn_ui_mode_settings"):
+            self.btn_ui_mode_settings.configure(
+                text="ÐŸÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒ Ð½Ð° ÐŸÑ€Ð¾ÑÑ‚Ð¾Ð¹ Ð¸Ð½Ñ‚ÐµÑ€Ñ„ÐµÐ¹Ñ" if expert else "ÐŸÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒ Ð½Ð° Ð Ð°ÑÑˆÐ¸Ñ€ÐµÐ½Ð½Ñ‹Ð¹ Ð¸Ð½Ñ‚ÐµÑ€Ñ„ÐµÐ¹Ñ",
+            )
+
+    def _apply_ui_mode(self):
+        visible = self._visible_tab_keys()
+        if hasattr(self, "tabbar"):
+            self.tabbar.set_visible(visible)
+            active = self.tabbar.active.get()
+            if active not in visible:
+                active = "video" if "video" in visible else visible[0]
+                self.tabbar.active.set(active)
+            self.tabbar._update()
+            self._on_tab_change(active)
+        self._refresh_ui_mode_widgets()
+
+    def _on_tab_change(self, key):
+        if key in self.tabs:
+            self.tabs[key].tkraise()
+
+    # â”€â”€ Ð’ÐºÐ»Ð°Ð´ÐºÐ°: Ð’Ð¸Ð´ÐµÐ¾ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    def _build_tab_video(self, parent):
+        pad = self._scrollable(parent)
+        pad.columnconfigure(0, weight=3)
+        pad.columnconfigure(1, weight=2)
+
+        top = tk.Frame(pad, bg=BG)
+        top.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 8))
+        left = tk.Frame(pad, bg=BG)
+        left.grid(row=1, column=0, sticky="nsew", padx=(0, 8))
+        right = tk.Frame(pad, bg=BG)
+        right.grid(row=1, column=1, sticky="nsew", padx=(8, 0))
+
+        body = self._card(top, "Очередь видео", "🎬")
+        tk.Label(
+            body,
+            text="Добавь локальные видео в очередь. Обработка пойдет сверху вниз по списку.",
+            font=FONT_SMALL, bg=BG2, fg=TEXT_DIM, wraplength=620, justify="left"
+        ).pack(anchor="w", pady=(0, 8))
+        lbf = tk.Frame(body, bg=BG3, pady=2)
+        lbf.pack(fill="x", pady=(0, 10))
+        self.queue_listbox = tk.Listbox(
+            lbf, bg=BG3, fg=TEXT, font=FONT_MONO, height=8,
+            selectbackground=PURPLE, selectforeground=BG, bd=0,
+            highlightthickness=0, activestyle="none"
+        )
+        self.queue_listbox.pack(fill="x", padx=6, pady=6)
+        row = tk.Frame(body, bg=BG2)
+        row.pack(fill="x")
+        self._btn(row, "+ Добавить видео", self._add_video, bg=PURPLE, fg=BG).pack(side="left", padx=(0, 8))
+        self._btn(row, "Убрать выбранное", self._remove_video, bg=BG3, fg=DANGER).pack(side="left")
+
+        body2 = self._card(left, "Папка для клипов", "📁")
+        tk.Label(
+            body2,
+            text="Сюда будут сохранены готовые клипы.",
+            font=FONT_SMALL, bg=BG2, fg=TEXT_DIM
+        ).pack(anchor="w", pady=(0, 6))
+        row2 = tk.Frame(body2, bg=BG3)
+        row2.pack(fill="x")
+        row2.columnconfigure(0, weight=1)
+        tk.Label(
+            row2, textvariable=self.out_folder, font=FONT_MONO,
+            bg=BG3, fg=TEXT_MED, anchor="w", wraplength=360, justify="left"
+        ).pack(side="left", fill="x", expand=True, padx=8, pady=8)
+        self._btn(row2, "Выбрать", self._pick_folder, bg=BG4, fg=PURPLE2).pack(side="right", padx=6, pady=6)
+
+        body3 = self._card(right, "Импорт с YouTube", "⬇")
+        tk.Label(
+            body3,
+            text="Вставь ссылку и скачай ролик прямо в очередь.",
+            font=FONT_SMALL, bg=BG2, fg=TEXT_DIM, wraplength=320, justify="left"
+        ).pack(anchor="w", pady=(0, 6))
+        yt = tk.Frame(body3, bg=BG3)
+        yt.pack(fill="x")
+        self.yt_entry = tk.Entry(
+            yt, textvariable=self.yt_url, font=FONT_MONO,
+            bg=BG3, fg=TEXT_DIM, insertbackground=PURPLE2,
+            bd=0, highlightthickness=0
+        )
+        self.yt_entry.pack(side="left", fill="x", expand=True, ipady=7, padx=8, pady=4)
+        self.yt_entry.insert(0, "https://youtube.com/watch?v=...")
+        self.yt_entry.bind("<FocusIn>", self._yt_in)
+        self.yt_entry.bind("<FocusOut>", self._yt_out)
+        self._btn(yt, "Скачать", self._download_yt, bg=BG4, fg=PURPLE2).pack(side="right", padx=6, pady=6)
+
+    def _build_tab_settings(self, parent):
+        pad = self._scrollable(parent)
+        pad.columnconfigure(0, weight=2)
+        pad.columnconfigure(1, weight=3)
+        left = tk.Frame(pad, bg=BG); left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        right = tk.Frame(pad, bg=BG); right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+
+        body = self._card(left, "ÐŸÐ°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ñ‹ ÐºÐ»Ð¸Ð¿Ð¾Ð²", "âš™ï¸")
+        grid = tk.Frame(body, bg=BG2); grid.pack(fill="x")
+        grid.columnconfigure((0, 1, 2), weight=1)
+        for col, (label, var, f, t) in enumerate([
+            ("ÐšÐ»Ð¸Ð¿Ð¾Ð²", self.num_clips, 1, 60),
+            ("ÐœÐ¸Ð½.ÑÐµÐº", self.min_dur, 10, 120),
+            ("ÐœÐ°ÐºÑ.ÑÐµÐº", self.max_dur, 20, 300),
+        ]):
+            cell = tk.Frame(grid, bg=BG3, padx=8, pady=8)
+            cell.grid(row=0, column=col, padx=(0 if col == 0 else 4, 0), sticky="ew")
+            tk.Label(cell, text=label, font=FONT_SMALL, bg=BG3, fg=TEXT_DIM).pack()
+            NumStepper(cell, var, f, t).pack(pady=(4, 0))
+
+        body2 = self._card(right, "Ð ÐµÐ¶Ð¸Ð¼ Ð°Ð½Ð°Ð»Ð¸Ð·Ð°", "âš¡")
+        tk.Label(
+            body2,
+            text="Ð ÐµÐ¶Ð¸Ð¼ Ð½Ð¸Ð¶Ðµ Ð¾Ñ‚Ð½Ð¾ÑÐ¸Ñ‚ÑÑ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ðº AI-Ð°Ð½Ð°Ð»Ð¸Ð·Ñƒ (Ð¿Ð¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²).",
+            font=FONT_SMALL, bg=BG2, fg=TEXT_DIM, wraplength=320
+        ).pack(anchor="w", pady=(0, 6))
+
+        def _analysis_components_for_mode(mode_key: str) -> str:
+            m = str(mode_key).strip().lower()
+            gpu_ai_available = bool(GPU.available) and bool(self.use_gpu.get())
+            if m == "split":
+                return "Ð½ÐµÑ‚ (Ñ€ÐµÐ¶Ð¸Ð¼ ÐŸÐ¾ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð¸)"
+
+            comps = ["Ð³Ñ€Ð¾Ð¼ÐºÐ¾ÑÑ‚ÑŒ"]
+            if m in ("balanced", "full", "hybrid"):
+                if self.opt_laugh.get():
+                    comps.append("ÑÐ¼ÐµÑ…(CPU)")
+                if self.opt_motion.get():
+                    move_where = "GPU" if self._is_motion_gpu_enabled() else "CPU"
+                    comps.append(f"Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ({move_where})")
+            if m in ("full", "hybrid"):
+                if self.opt_whisper.get():
+                    if m == "hybrid":
+                        comps.append("Ñ€ÐµÑ‡ÑŒ(GPU/CPU Ð°Ð²Ñ‚Ð¾)")
+                    else:
+                        comps.append("Ñ€ÐµÑ‡ÑŒ(CPU)")
+                if self.opt_faces.get():
+                    if gpu_ai_available:
+                        comps.append("Ð»Ð¸Ñ†Ð°(GPU/CPU Ð°Ð²Ñ‚Ð¾)")
+                    else:
+                        comps.append("Ð»Ð¸Ñ†Ð°(CPU)")
+
+            return ", ".join(comps)
+
+        def _mode_analysis_short(mode_key: str) -> str:
+            m = str(mode_key).strip().lower()
+            gpu_ai_available = bool(GPU.available) and bool(self.use_gpu.get())
+            motion_gpu = bool(self.opt_motion.get()) and self._is_motion_gpu_enabled()
+            if m == "fast":
+                return "CPU"
+            if m == "balanced":
+                return "CPU+GPU" if motion_gpu else "CPU"
+            if m == "hybrid":
+                hybrid_gpu = motion_gpu or (gpu_ai_available and (self.opt_whisper.get() or self.opt_faces.get()))
+                return "CPU+GPU" if hybrid_gpu else "CPU"
+            if m == "full":
+                full_gpu = motion_gpu or (self.opt_faces.get() and gpu_ai_available)
+                return "CPU+GPU" if full_gpu else "CPU"
+            if m == "split":
+                return "Ð²Ñ‹ÐºÐ»"
+            return "CPU"
+
+        def _render_components_now() -> str:
+            effects = []
+            if self.opt_mirror.get():
+                effects.append("Ð·ÐµÑ€ÐºÐ°Ð»Ð¾")
+            if self.opt_zoom.get():
+                effects.append("Ð·ÑƒÐ¼ 2%")
+            if self.opt_color.get():
+                effects.append("Ñ†Ð²ÐµÑ‚")
+            if self.opt_vertical.get():
+                effects.append("9:16")
+            speed = str(self.speed_val.get()).strip() or "1x"
+            effects.append(f"ÑÐºÐ¾Ñ€Ð¾ÑÑ‚ÑŒ {speed}")
+            if self.opt_subs.get():
+                effects.append("ÑÑƒÐ±Ñ‚Ð¸Ñ‚Ñ€Ñ‹")
+            if not effects:
+                return "Ð½Ð°Ñ€ÐµÐ·ÐºÐ° + ÐºÐ¾Ð´ÐµÐº + Ð°ÑƒÐ´Ð¸Ð¾ (Ð±ÐµÐ· ÑÑ„Ñ„ÐµÐºÑ‚Ð¾Ð²)"
+            return f"Ð½Ð°Ñ€ÐµÐ·ÐºÐ° + ÐºÐ¾Ð´ÐµÐº + Ð°ÑƒÐ´Ð¸Ð¾; ÑÑ„Ñ„ÐµÐºÑ‚Ñ‹: {', '.join(effects)}"
+
+        def _mode_runtime_text(mode_key: str) -> str:
+            analysis = _mode_analysis_short(mode_key)
+            render = "GPU" if self._effective_fx_backend() == "gpu" else "CPU"
+            analysis_components = _analysis_components_for_mode(mode_key)
+            render_components = _render_components_now()
+            return (
+                f"ÐÐ½Ð°Ð»Ð¸Ð·: {analysis} | ÐºÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ñ‹: {analysis_components}\n"
+                f"Ð ÐµÐ½Ð´ÐµÑ€: {render} | {render_components}"
+            )
+
+        modes = [
+            ("fast",     "âš¡ Ð‘Ñ‹ÑÑ‚Ñ€Ñ‹Ð¹",    "Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð³Ñ€Ð¾Ð¼ÐºÐ¾ÑÑ‚ÑŒ"),
+            ("balanced", "âš–ï¸ Ð‘Ð°Ð»Ð°Ð½Ñ",     "Ð³Ñ€Ð¾Ð¼ÐºÐ¾ÑÑ‚ÑŒ + Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ"),
+            ("hybrid",   " Ð“Ð¸Ð±Ñ€Ð¸Ð´",     "CPU + GPU Ð¿Ð°Ñ€Ð°Ð»Ð»ÐµÐ»ÑŒÐ½Ð¾"),
+            ("full",     " ÐŸÐ¾Ð»Ð½Ñ‹Ð¹",     "Ð¿Ð¾Ð»Ð½Ñ‹Ð¹ AI; Ð»Ð¸Ñ†Ð° Ð¼Ð¾Ð³ÑƒÑ‚ Ð¸Ð´Ñ‚Ð¸ Ñ‡ÐµÑ€ÐµÐ· GPU"),
+            ("split",    "âœ‚ï¸ ÐŸÐ¾ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð¸", "Ð½Ð°Ñ€ÐµÐ·ÐºÐ° Ð±ÐµÐ· AI"),
+        ]
+        for val, label, hint in modes:
+            f = tk.Frame(body2, bg=BG3, cursor="hand2"); f.pack(fill="x", pady=(0, 5))
+            f.bind("<Button-1>", lambda e, v=val: self.mode.set(v))
+            inner = tk.Frame(f, bg=BG3, padx=10, pady=7); inner.pack(fill="x")
+            inner.bind("<Button-1>", lambda e, v=val: self.mode.set(v))
+            inner.columnconfigure(1, weight=1)
+            ind = tk.Label(inner, text="â—‹", font=("Bahnschrift SemiBold", 12), bg=BG3, fg=PURPLE2, cursor="hand2")
+            ind.grid(row=0, column=0, padx=(0, 8))
+            ind.bind("<Button-1>", lambda e, v=val: self.mode.set(v))
+            info = tk.Frame(inner, bg=BG3); info.grid(row=0, column=1, sticky="w")
+            info.bind("<Button-1>", lambda e, v=val: self.mode.set(v))
+            tk.Label(info, text=label, font=FONT_BTN, bg=BG3, fg=TEXT).pack(anchor="w")
+            tk.Label(info, text=hint, font=FONT_SMALL, bg=BG3, fg=TEXT_DIM).pack(anchor="w")
+            load_lbl = tk.Label(
+                inner, text="", font=FONT_SMALL, bg=BG3, fg=TEXT_MED,
+                justify="right", wraplength=300
+            )
+            load_lbl.grid(row=0, column=2, padx=(8, 0))
+            def upd(ind=ind, f=f, inner=inner, info=info, v=val, load_lbl=load_lbl):
+                active = self.mode.get() == v
+                clr = BG4 if active else BG3
+                load = _mode_runtime_text(v)
+                lc = PURPLE2 if "GPU" in load else TEXT_MED
+                ind.configure(text="â—‰" if active else "â—‹", bg=clr)
+                f.configure(bg=clr); inner.configure(bg=clr); info.configure(bg=clr)
+                for w in info.winfo_children(): w.configure(bg=clr)
+                load_lbl.configure(text=load, fg=lc, bg=clr)
+            self.mode.trace_add("write", lambda *a, u=upd: u())
+            self.fx_backend.trace_add("write", lambda *a, u=upd: u())
+            self.use_gpu.trace_add("write", lambda *a, u=upd: u())
+            self.opt_whisper.trace_add("write", lambda *a, u=upd: u())
+            self.opt_laugh.trace_add("write", lambda *a, u=upd: u())
+            self.opt_motion.trace_add("write", lambda *a, u=upd: u())
+            self.opt_faces.trace_add("write", lambda *a, u=upd: u())
+            self.opt_mirror.trace_add("write", lambda *a, u=upd: u())
+            self.opt_zoom.trace_add("write", lambda *a, u=upd: u())
+            self.opt_color.trace_add("write", lambda *a, u=upd: u())
+            self.opt_vertical.trace_add("write", lambda *a, u=upd: u())
+            self.opt_subs.trace_add("write", lambda *a, u=upd: u())
+            self.speed_val.trace_add("write", lambda *a, u=upd: u())
+            upd()
+
+        tk.Label(
+            body2,
+            text="ÐŸÐ¾Ð´Ð¿Ð¸ÑÑŒ ÑÐ¿Ñ€Ð°Ð²Ð° Ð¾Ð±Ð½Ð¾Ð²Ð»ÑÐµÑ‚ÑÑ Ð°Ð²Ñ‚Ð¾Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸ Ð¿Ñ€Ð¸ ÑÐ¼ÐµÐ½Ðµ Ñ€ÐµÐ¶Ð¸Ð¼Ð° Ð¸ CPU/GPU-Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°Ñ‚ÐµÐ»ÐµÐ¹.",
+            font=FONT_SMALL, bg=BG2, fg=TEXT_DIM, wraplength=320
+        ).pack(anchor="w", pady=(2, 4))
+
+        # ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ¸ Ñ€ÐµÐ¶Ð¸Ð¼Ð° ÐŸÐ¾ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð¸
+        self.split_frame = tk.Frame(body2, bg=BG2)
+        self.split_frame.pack(fill="x", pady=(4, 0))
+        tk.Frame(self.split_frame, bg=BORDER, height=1).pack(fill="x", pady=(0, 8))
+        sr1 = tk.Frame(self.split_frame, bg=BG2); sr1.pack(fill="x", pady=(0, 6))
+        tk.Label(sr1, text="Ð”Ð»Ð¸Ð½Ð° ÐºÐ»Ð¸Ð¿Ð° (ÑÐµÐº):", font=FONT_SMALL, bg=BG2, fg=TEXT_MED).pack(side="left", padx=(0, 8))
+        NumStepper(sr1, self.split_dur, 10, 300).pack(side="left")
+        sr2 = tk.Frame(self.split_frame, bg=BG2); sr2.pack(fill="x")
+        Toggle(sr2, self.split_limit, "ÐžÐ³Ñ€Ð°Ð½Ð¸Ñ‡Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»-Ð²Ð¾ ÐºÐ»Ð¸Ð¿Ð¾Ð²").pack(anchor="w")
+
+        def _upd_split(*a):
+            if self.mode.get() == "split":
+                self.split_frame.pack(fill="x", pady=(4, 0))
+            else:
+                self.split_frame.pack_forget()
+        self.mode.trace_add("write", _upd_split); _upd_split()
+
+        body_ui = self._card(right, "Ð˜Ð½Ñ‚ÐµÑ€Ñ„ÐµÐ¹Ñ", "ðŸ§­")
+        tk.Label(
+            body_ui,
+            text="ÐŸÑ€Ð¾ÑÑ‚Ð¾Ð¹ Ñ€ÐµÐ¶Ð¸Ð¼ ÑÐºÑ€Ñ‹Ð²Ð°ÐµÑ‚ Ð²ÐºÐ»Ð°Ð´ÐºÐ¸ Ð­Ñ„Ñ„ÐµÐºÑ‚Ñ‹ Ð¸ ÐÐ½Ð°Ð»Ð¸Ð·, "
+                 "Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð½Ðµ Ð¿ÐµÑ€ÐµÐ³Ñ€ÑƒÐ¶Ð°Ñ‚ÑŒ ÑÐºÑ€Ð°Ð½.",
+            font=FONT_SMALL, bg=BG2, fg=TEXT_DIM, wraplength=320, justify="left"
+        ).pack(anchor="w", pady=(0, 8))
+        self.btn_ui_mode_settings = self._btn(
+            body_ui, "", self._toggle_ui_mode, bg=BG3, fg=TEXT
+        )
+        self.btn_ui_mode_settings.pack(fill="x")
+        self._refresh_ui_mode_widgets()
+
+    # â”€â”€ Ð’ÐºÐ»Ð°Ð´ÐºÐ°: Ð­Ñ„Ñ„ÐµÐºÑ‚Ñ‹ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    def _build_tab_effects(self, parent):
+        pad = self._scrollable(parent)
+        pad.columnconfigure(0, weight=3)
+        pad.columnconfigure(1, weight=2)
+        left = tk.Frame(pad, bg=BG); left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        right = tk.Frame(pad, bg=BG); right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+
+        body = self._card(left, "Ð’Ð¸Ð·ÑƒÐ°Ð»ÑŒÐ½Ñ‹Ðµ ÑÑ„Ñ„ÐµÐºÑ‚Ñ‹", "âœ¨")
+        for label, var in [
+            (" Ð—ÐµÑ€ÐºÐ°Ð»Ð¾ (hflip)", self.opt_mirror),
+            (" Ð—ÑƒÐ¼ 2%", self.opt_zoom),
+            (" Ð¦Ð²ÐµÑ‚Ð¾ÐºÐ¾Ñ€Ñ€ÐµÐºÑ†Ð¸Ñ", self.opt_color),
+            (" Ð’ÐµÑ€Ñ‚Ð¸ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ 9:16", self.opt_vertical),
+        ]:
+            row = tk.Frame(body, bg=BG3, padx=10, pady=8); row.pack(fill="x", pady=(0, 5))
+            Toggle(row, var, label).pack(anchor="w")
+
+        body2 = self._card(left, "Ð¡ÐºÐ¾Ñ€Ð¾ÑÑ‚ÑŒ Ð²Ð¸Ð´ÐµÐ¾", "â©")
+        tk.Label(body2, text="Ð’Ð¸Ð´ÐµÐ¾ Ð¸ Ð°ÑƒÐ´Ð¸Ð¾ Ð¼ÐµÐ½ÑÑŽÑ‚ÑÑ ÑÐ¸Ð½Ñ…Ñ€Ð¾Ð½Ð½Ð¾",
+                 font=FONT_SMALL, bg=BG2, fg=TEXT_DIM).pack(anchor="w", pady=(0, 8))
+        speeds = [("0.5x", "Ð—Ð°Ð¼ÐµÐ´Ð»ÐµÐ½Ð¸Ðµ"), ("1x", "ÐžÐ±Ñ‹Ñ‡Ð½Ð°Ñ"), ("1.5x", "Ð£ÑÐºÐ¾Ñ€ÐµÐ½Ð¸Ðµ"), ("2x", "Ð‘Ñ‹ÑÑ‚Ñ€Ð¾")]
+        sg = tk.Frame(body2, bg=BG2); sg.pack(fill="x")
+        sg.columnconfigure((0, 1, 2, 3), weight=1)
+        for i, (val, label) in enumerate(speeds):
+            cell = tk.Frame(sg, bg=BG3, padx=6, pady=8, cursor="hand2")
+            cell.grid(row=0, column=i, padx=(0 if i == 0 else 4, 0), sticky="ew")
+            cell.bind("<Button-1>", lambda e, v=val: self.speed_val.set(v))
+            lbl = tk.Label(cell, text=val, font=FONT_BTN, bg=BG3, fg=TEXT, cursor="hand2")
+            lbl.pack(); lbl.bind("<Button-1>", lambda e, v=val: self.speed_val.set(v))
+            hl = tk.Label(cell, text=label, font=FONT_SMALL, bg=BG3, fg=TEXT_DIM, cursor="hand2")
+            hl.pack(); hl.bind("<Button-1>", lambda e, v=val: self.speed_val.set(v))
+            def upd_s(cell=cell, lbl=lbl, hl=hl, v=val):
+                active = self.speed_val.get() == v
+                clr = BG4 if active else BG3; ac = PURPLE2 if active else TEXT
+                cell.configure(bg=clr); lbl.configure(bg=clr, fg=ac); hl.configure(bg=clr)
+            self.speed_val.trace_add("write", lambda *a, u=upd_s: u()); upd_s()
+
+        body_backend = self._card(right, "Ð“Ð´Ðµ ÑÑ‡Ð¸Ñ‚Ð°Ñ‚ÑŒ ÑÑ„Ñ„ÐµÐºÑ‚Ñ‹", "âš™")
+        tk.Label(
+            body_backend,
+            text="Ð¤ÑƒÐ½ÐºÑ†Ð¸Ð¸: Ð—ÐµÑ€ÐºÐ°Ð»Ð¾, Ð—ÑƒÐ¼ 2%, Ð¦Ð²ÐµÑ‚Ð¾ÐºÐ¾Ñ€Ñ€ÐµÐºÑ†Ð¸Ñ, Ð’ÐµÑ€Ñ‚Ð¸ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ 9:16, Ð¡ÐºÐ¾Ñ€Ð¾ÑÑ‚ÑŒ Ð²Ð¸Ð´ÐµÐ¾",
+            font=FONT_SMALL, bg=BG2, fg=TEXT_DIM
+        ).pack(anchor="w", pady=(0, 8))
+        tk.Label(
+            body_backend,
+            text="Ð­Ñ‚Ð¾Ñ‚ Ð²Ñ‹Ð±Ð¾Ñ€ Ð²Ð»Ð¸ÑÐµÑ‚ Ð½Ð° Ð¨Ð°Ð³ 2 (Ñ€ÐµÐ½Ð´ÐµÑ€) Ð¸ Ð½Ð° ÐºÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚ Ð”Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ Ð² AI-Ð°Ð½Ð°Ð»Ð¸Ð·Ðµ.",
+            font=FONT_SMALL, bg=BG2, fg=TEXT_DIM, wraplength=280
+        ).pack(anchor="w", pady=(0, 6))
+        bg_sel = tk.Frame(body_backend, bg=BG2)
+        bg_sel.pack(fill="x")
+        bg_sel.columnconfigure((0, 1), weight=1)
+        options = [
+            ("cpu", "CPU", "Ð¡Ñ‚Ð°Ð±Ð¸Ð»ÑŒÐ½Ð¾ Ð¸ Ð¿Ñ€ÐµÐ´ÑÐºÐ°Ð·ÑƒÐµÐ¼Ð¾"),
+            ("gpu", "GPU", "Ð‘Ñ‹ÑÑ‚Ñ€ÐµÐµ Ñ€ÐµÐ½Ð´ÐµÑ€ (NVENC)"),
+        ]
+        for i, (value, title, hint) in enumerate(options):
+            cell = tk.Frame(bg_sel, bg=BG3, padx=8, pady=8, cursor="hand2")
+            cell.grid(row=0, column=i, padx=(0 if i == 0 else 4, 0), sticky="ew")
+            lbl = tk.Label(cell, text=title, font=FONT_BTN, bg=BG3, fg=TEXT, cursor="hand2")
+            lbl.pack()
+            hl = tk.Label(cell, text=hint, font=FONT_SMALL, bg=BG3, fg=TEXT_DIM, cursor="hand2")
+            hl.pack()
+
+            def pick_backend(v=value):
+                if v == "gpu" and not GPU.available:
+                    self.fx_backend.set("cpu")
+                    self._safe_log("âš ï¸ GPU Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ â€” Ð—ÐµÑ€ÐºÐ°Ð»Ð¾/Ð—ÑƒÐ¼/Ð¦Ð²ÐµÑ‚/9:16/Ð¡ÐºÐ¾Ñ€Ð¾ÑÑ‚ÑŒ Ð¾ÑÑ‚Ð°ÑŽÑ‚ÑÑ Ð½Ð° CPU", "warn")
+                    return
+                self.fx_backend.set(v)
+
+            cell.bind("<Button-1>", lambda e, p=pick_backend: p())
+            lbl.bind("<Button-1>", lambda e, p=pick_backend: p())
+            hl.bind("<Button-1>", lambda e, p=pick_backend: p())
+
+            def upd_fx(cell=cell, lbl=lbl, hl=hl, v=value):
+                active = self.fx_backend.get() == v
+                locked = (v == "gpu" and not GPU.available)
+                clr = BG4 if active and not locked else BG3
+                txt = TEXT_DIM if locked else (PURPLE2 if active else TEXT)
+                sub = WARN if locked else TEXT_DIM
+                cell.configure(bg=clr)
+                lbl.configure(bg=clr, fg=txt)
+                hl.configure(bg=clr, fg=sub)
+
+            self.fx_backend.trace_add("write", lambda *a, u=upd_fx: u())
+            upd_fx()
+
+        tk.Label(
+            body_backend,
+            text="Ð•ÑÐ»Ð¸ Ð¾Ð±Ñ‰Ð¸Ð¹ Ñ‚ÑƒÐ¼Ð±Ð»ÐµÑ€ GPU Ð² ÐŸÑ€Ð¾Ð¸Ð·Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚Ð¸ Ð²Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½, Ð¿Ñ€Ð¸Ð¼ÐµÐ½ÑÐµÑ‚ÑÑ CPU.",
+            font=FONT_SMALL, bg=BG2, fg=TEXT_DIM, wraplength=280
+        ).pack(anchor="w", pady=(6, 0))
+
+        body3 = self._card(right, "Ð¡ÑƒÐ±Ñ‚Ð¸Ñ‚Ñ€Ñ‹", "")
+        Toggle(body3, self.opt_subs, "ÐŸÐ¾ÐºÐ°Ð´Ñ€Ð¾Ð²Ñ‹Ðµ ÑÑƒÐ±Ñ‚Ð¸Ñ‚Ñ€Ñ‹ (ÑÐ»Ð¾Ð²Ð¾ Ð·Ð° ÑÐ»Ð¾Ð²Ð¾Ð¼)").pack(anchor="w", pady=(0, 8))
+        tk.Label(body3, text="Ð¡Ñ‚Ð¸Ð»ÑŒ: Ð±ÐµÐ»Ñ‹Ð¹ Ñ‚ÐµÐºÑÑ‚ Ñ Ñ‡Ñ‘Ñ€Ð½Ð¾Ð¹ Ð¾Ð±Ð²Ð¾Ð´ÐºÐ¾Ð¹ Ð¿Ð¾ Ñ†ÐµÐ½Ñ‚Ñ€Ñƒ",
+                 font=FONT_SMALL, bg=BG2, fg=TEXT_DIM).pack(anchor="w")
+        tk.Label(body3, text="Ð¢Ñ€ÐµÐ±ÑƒÐµÑ‚ Ñ€ÐµÐ¶Ð¸Ð¼ Ð“Ð¸Ð±Ñ€Ð¸Ð´ Ð¸Ð»Ð¸ ÐŸÐ¾Ð»Ð½Ñ‹Ð¹ (Ð½ÑƒÐ¶ÐµÐ½ Whisper)",
+                 font=FONT_SMALL, bg=BG2, fg=WARN, wraplength=280).pack(anchor="w", pady=(4, 0))
+        tk.Label(body3, text="âœ… Ð¡ Ð·ÐµÑ€ÐºÐ°Ð»Ð¾Ð¼ Ñ€Ð°Ð±Ð¾Ñ‚Ð°ÐµÑ‚ ÐºÐ¾Ñ€Ñ€ÐµÐºÑ‚Ð½Ð¾ â€” Ñ„Ð¸Ð»ÑŒÑ‚Ñ€Ñ‹ Ð² Ð¿Ñ€Ð°Ð²Ð¸Ð»ÑŒÐ½Ð¾Ð¼ Ð¿Ð¾Ñ€ÑÐ´ÐºÐµ",
+                 font=FONT_SMALL, bg=BG2, fg=SUCCESS, wraplength=280).pack(anchor="w", pady=(4, 0))
+
+    # â”€â”€ Ð’ÐºÐ»Ð°Ð´ÐºÐ°: ÐÐ½Ð°Ð»Ð¸Ð· AI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    def _build_tab_ai(self, parent):
+        pad = self._scrollable(parent)
+        pad.columnconfigure(0, weight=3)
+        pad.columnconfigure(1, weight=2)
+        left = tk.Frame(pad, bg=BG); left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        right = tk.Frame(pad, bg=BG); right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+
+        body = self._card(left, "AI ÐºÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ñ‹", "")
+        for comp_key, label, var, wvar, where in [
+            ("speech", " Ð ÐµÑ‡ÑŒ (Whisper)", self.opt_whisper, self.w_speech, "GPU"),
+            ("laugh",  " Ð¡Ð¼ÐµÑ…",           self.opt_laugh,   self.w_laugh,  "CPU"),
+            ("motion", " Ð”Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ",       self.opt_motion,  self.w_motion, "CPU"),
+            ("faces",  " Ð›Ð¸Ñ†Ð°",           self.opt_faces,   self.w_faces,  "GPU"),
+        ]:
+            row = tk.Frame(body, bg=BG3, padx=10, pady=7); row.pack(fill="x", pady=(0, 5))
+            row.columnconfigure(1, weight=1)
+            Toggle(row, var).grid(row=0, column=0, padx=(0, 8))
+            tk.Label(row, text=label, font=FONT_SMALL, bg=BG3, fg=TEXT).grid(row=0, column=1, sticky="w")
+            bc = PURPLE2 if where == "GPU" else TEXT_MED
+            where_lbl = tk.Label(row, text=where, font=FONT_SMALL, bg=BG4, fg=bc, padx=6, pady=2)
+            where_lbl.grid(row=0, column=2, padx=(4, 8))
+            if comp_key == "motion":
+                def _upd_motion_where(lbl=where_lbl):
+                    motion_gpu = self._is_motion_gpu_enabled()
+                    txt = "GPU" if motion_gpu else "CPU"
+                    fg = PURPLE2 if motion_gpu else TEXT_MED
+                    lbl.configure(text=txt, fg=fg)
+
+                self.fx_backend.trace_add("write", lambda *a, u=_upd_motion_where: u())
+                self.use_gpu.trace_add("write", lambda *a, u=_upd_motion_where: u())
+                self.opt_motion.trace_add("write", lambda *a, u=_upd_motion_where: u())
+                _upd_motion_where()
+            pri = tk.Frame(row, bg=BG3); pri.grid(row=0, column=3)
+            tk.Label(pri, text="Ð²ÐµÑ:", font=FONT_SMALL, bg=BG3, fg=TEXT_DIM).pack(side="left", padx=(0, 4))
+            NumStepper(pri, wvar, 1, 5, width=2).pack(side="left")
+
+        row_a = tk.Frame(body, bg=BG3, padx=10, pady=7); row_a.pack(fill="x", pady=(0, 5))
+        row_a.columnconfigure(1, weight=1)
+        tk.Label(row_a, text=" ÐÑƒÐ´Ð¸Ð¾ Ð³Ñ€Ð¾Ð¼ÐºÐ¾ÑÑ‚ÑŒ", font=FONT_SMALL, bg=BG3, fg=TEXT).grid(row=0, column=1, sticky="w")
+        tk.Label(row_a, text="CPU", font=FONT_SMALL, bg=BG4, fg=TEXT_MED,
+                 padx=6, pady=2).grid(row=0, column=2, padx=(4, 8))
+        pri_a = tk.Frame(row_a, bg=BG3); pri_a.grid(row=0, column=3)
+        tk.Label(pri_a, text="Ð²ÐµÑ:", font=FONT_SMALL, bg=BG3, fg=TEXT_DIM).pack(side="left", padx=(0, 4))
+        NumStepper(pri_a, self.w_audio, 1, 5, width=2).pack(side="left")
+
+        body2 = self._card(right, "ÐšÐ»ÑŽÑ‡ÐµÐ²Ñ‹Ðµ ÑÐ»Ð¾Ð²Ð°", "")
+        tk.Label(body2, text="Whisper Ð²Ñ‹Ð´ÐµÐ»Ð¸Ñ‚ Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ñ‹ Ñ ÑÑ‚Ð¸Ð¼Ð¸ ÑÐ»Ð¾Ð²Ð°Ð¼Ð¸",
+                 font=FONT_SMALL, bg=BG2, fg=TEXT_DIM).pack(anchor="w", pady=(0, 6))
+        kw = tk.Frame(body2, bg=BG3); kw.pack(fill="x")
+        tk.Entry(kw, textvariable=self.keywords, font=FONT_MONO, bg=BG3, fg=TEXT,
+                 insertbackground=PURPLE2, bd=0, highlightthickness=0).pack(fill="x", ipady=6, padx=8)
+        tk.Label(body2, text="Ð§ÐµÑ€ÐµÐ· Ð·Ð°Ð¿ÑÑ‚ÑƒÑŽ. ÐŸÑ€Ð¸Ð¼ÐµÑ€: ÑÐ¼ÐµÑ…, Ð²Ð°Ñƒ, Ð¿Ð¾Ð±ÐµÐ´Ð°",
+                 font=FONT_SMALL, bg=BG2, fg=TEXT_DIM).pack(anchor="w", pady=(4, 0))
+
+        body3 = self._card(right, "Ð“Ð¸Ð±Ñ€Ð¸Ð´ Ñ€ÐµÐ¶Ð¸Ð¼", "")
+        tk.Label(body3, text="CPU Ð¿Ð°Ñ€Ð°Ð»Ð»ÐµÐ»ÑŒÐ½Ð¾ Ð´ÐµÐ»Ð°ÐµÑ‚:",
+                 font=FONT_SMALL, bg=BG2, fg=TEXT_MED).pack(anchor="w")
+        tk.Label(body3, text="  â€¢ ÐÐ½Ð°Ð»Ð¸Ð· ÑÐ¼ÐµÑ…Ð°\n  â€¢ Ð“Ñ€Ð¾Ð¼ÐºÐ¾ÑÑ‚ÑŒ Ð°ÑƒÐ´Ð¸Ð¾",
+                 font=FONT_SMALL, bg=BG2, fg=TEXT_DIM).pack(anchor="w")
+
+        motion_note = tk.Label(body3, text="",
+                               font=FONT_SMALL, bg=BG2, fg=TEXT_DIM,
+                               wraplength=280, justify="left")
+        motion_note.pack(anchor="w", pady=(4, 0))
+
+        tk.Label(body3, text="GPU Ð¿Ð°Ñ€Ð°Ð»Ð»ÐµÐ»ÑŒÐ½Ð¾ Ð´ÐµÐ»Ð°ÐµÑ‚:",
+                 font=FONT_SMALL, bg=BG2, fg=TEXT_MED).pack(anchor="w", pady=(8, 0))
+        tk.Label(body3, text="  â€¢ Whisper (Ñ€ÐµÑ‡ÑŒ)\n  â€¢ Face detector (Ð»Ð¸Ñ†Ð°, GPU/CPU Ð°Ð²Ñ‚Ð¾)",
+                 font=FONT_SMALL, bg=BG2, fg=PURPLE2).pack(anchor="w")
+
+        hybrid_note = tk.Label(body3, text="",
+                               font=FONT_SMALL, bg=BG2, fg=SUCCESS,
+                               wraplength=280, justify="left")
+        hybrid_note.pack(anchor="w", pady=(6, 0))
+
+        def _upd_hybrid_runtime_notes(note_lbl=motion_note, mode_lbl=hybrid_note):
+            if not self.opt_motion.get():
+                note_lbl.configure(text="  â€¢ ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ: Ð²Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½", fg=TEXT_DIM)
+            elif self._is_motion_gpu_enabled():
+                note_lbl.configure(
+                    text="  â€¢ ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ: GPU (Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°Ñ‚ÐµÐ»ÑŒ Ð­Ñ„Ñ„ÐµÐºÑ‚Ð¾Ð² = GPU)",
+                    fg=PURPLE2,
+                )
+            else:
+                note_lbl.configure(
+                    text="  â€¢ ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ: CPU (Ð­Ñ„Ñ„ÐµÐºÑ‚Ñ‹=CPU Ð¸Ð»Ð¸ GPU Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½)",
+                    fg=TEXT_DIM,
+                )
+
+            if self.mode.get() == "hybrid":
+                mode_lbl.configure(text="âš¡ Ð’ Ð“Ð¸Ð±Ñ€Ð¸Ð´Ðµ CPU Ð¸ GPU Ð¸Ð´ÑƒÑ‚ Ð¿Ð°Ñ€Ð°Ð»Ð»ÐµÐ»ÑŒÐ½Ð¾ â€” ÑÑ‚Ð¾ Ð½Ð¾Ñ€Ð¼Ð°Ð»ÑŒÐ½Ð¾.")
+            else:
+                mode_lbl.configure(text="â„¹ï¸ ÐšÐ°Ñ€Ñ‚Ð¾Ñ‡ÐºÐ° Ð¾Ð¿Ð¸ÑÑ‹Ð²Ð°ÐµÑ‚ Ð¿Ð¾Ð²ÐµÐ´ÐµÐ½Ð¸Ðµ Ñ€ÐµÐ¶Ð¸Ð¼Ð° Ð“Ð¸Ð±Ñ€Ð¸Ð´.")
+
+        self.fx_backend.trace_add("write", lambda *a, u=_upd_hybrid_runtime_notes: u())
+        self.use_gpu.trace_add("write", lambda *a, u=_upd_hybrid_runtime_notes: u())
+        self.opt_motion.trace_add("write", lambda *a, u=_upd_hybrid_runtime_notes: u())
+        self.mode.trace_add("write", lambda *a, u=_upd_hybrid_runtime_notes: u())
+        _upd_hybrid_runtime_notes()
+
+    # â”€â”€ Ð’ÐºÐ»Ð°Ð´ÐºÐ°: ÐŸÑ€Ð¾Ð¸Ð·Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚ÑŒ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    def _build_tab_perf(self, parent):
+        pad = self._scrollable(parent)
+        pad.columnconfigure(0, weight=2)
+        pad.columnconfigure(1, weight=2)
+        left = tk.Frame(pad, bg=BG); left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        right = tk.Frame(pad, bg=BG); right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+
+        # â”€â”€ GPU â”€â”€
+        body_gpu = self._card(left, "Ð’Ð¸Ð´ÐµÐ¾ÐºÐ°Ñ€Ñ‚Ð° (GPU)", "")
+        if GPU.available:
+            tk.Label(body_gpu, text=f"âœ… {GPU.name}",
+                     font=FONT_LABEL, bg=BG2, fg=SUCCESS).pack(anchor="w")
+            tk.Label(body_gpu, text=f"VRAM: {GPU.vram_total} MB  |  CUDA: {GPU.cuda_version}",
+                     font=FONT_SMALL, bg=BG2, fg=TEXT_DIM).pack(anchor="w", pady=(2, 8))
+            Toggle(body_gpu, self.use_gpu, "Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÑŒ GPU").pack(anchor="w", pady=(0, 10))
+
+            tk.Label(body_gpu, text="Ð›Ð¸Ð¼Ð¸Ñ‚ VRAM (%):",
+                     font=FONT_SMALL, bg=BG2, fg=TEXT_MED).pack(anchor="w")
+            tk.Label(body_gpu,
+                     text="ÐŸÑ€Ð¾Ð³Ñ€Ð°Ð¼Ð¼Ð° Ð¿Ñ€Ð¾Ð²ÐµÑ€ÑÐµÑ‚ VRAM Ð¿ÐµÑ€ÐµÐ´ ÐºÐ°Ð¶Ð´Ð¾Ð¹ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ¾Ð¹ Ð¼Ð¾Ð´ÐµÐ»Ð¸.\n"
+                          "Ð•ÑÐ»Ð¸ Ð½Ðµ Ñ…Ð²Ð°Ñ‚Ð°ÐµÑ‚ â€” Ð°Ð²Ñ‚Ð¾Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸ Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°ÐµÑ‚ÑÑ Ð½Ð° CPU.",
+                     font=FONT_SMALL, bg=BG2, fg=TEXT_DIM, wraplength=290,
+                     justify="left").pack(anchor="w", pady=(2, 4))
+            tk.Scale(body_gpu, variable=self.gpu_vram_limit, from_=30, to=90,
+                     orient="horizontal", bg=BG2, fg=TEXT, troughcolor=BG3,
+                     highlightthickness=0, bd=0, sliderlength=16,
+                     activebackground=PURPLE, font=FONT_SMALL,
+                     command=lambda v: None).pack(fill="x")
+            tk.Label(body_gpu,
+                     text=f"âœ… Ð”ÐµÑ„Ð¾Ð»Ñ‚ {DEFAULT_GPU_VRAM_PCT}% â€” Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾  |  ÐÐµ Ð²Ñ‹ÑˆÐµ 90%",
+                     font=FONT_SMALL, bg=BG2, fg=SUCCESS).pack(anchor="w", pady=(2, 0))
+        else:
+            tk.Label(body_gpu, text="âš ï¸ GPU Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½",
+                     font=FONT_LABEL, bg=BG2, fg=WARN).pack(anchor="w")
+            tk.Label(body_gpu,
+                     text="Ð£ÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚Ðµ CUDA Toolkit Ð¸ PyTorch Ñ CUDA.\n"
+                          "ÐŸÑ€Ð¾Ð²ÐµÑ€ÑŒ: nvidia-smi Ð² ÐºÐ¾Ð¼Ð°Ð½Ð´Ð½Ð¾Ð¹ ÑÑ‚Ñ€Ð¾ÐºÐµ.",
+                     font=FONT_SMALL, bg=BG2, fg=TEXT_DIM, wraplength=290).pack(anchor="w", pady=(4, 0))
+
+        # â”€â”€ CPU â”€â”€
+        body_cpu = self._card(left, "ÐŸÑ€Ð¾Ñ†ÐµÑÑÐ¾Ñ€ (CPU)", "")
+        cpu_total = get_cpu_count()
+        tk.Label(body_cpu, text=f"Ð”Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾ ÑÐ´ÐµÑ€: {cpu_total}",
+                 font=FONT_SMALL, bg=BG2, fg=TEXT_DIM).pack(anchor="w", pady=(0, 4))
+        tk.Label(body_cpu, text="ÐŸÐ¾Ñ‚Ð¾ÐºÐ¾Ð² Ð´Ð»Ñ Ð°Ð½Ð°Ð»Ð¸Ð·Ð°:",
+                 font=FONT_SMALL, bg=BG2, fg=TEXT_MED).pack(anchor="w")
+        tk.Label(body_cpu,
+                 text="ÐžÑÑ‚Ð°Ð²ÑŒÑ‚Ðµ Ð¼Ð¸Ð½Ð¸Ð¼ÑƒÐ¼ 2 ÑÐ´Ñ€Ð° ÑÐ¸ÑÑ‚ÐµÐ¼Ðµ â€” Ð¸Ð½Ð°Ñ‡Ðµ Ð½Ð¾ÑƒÑ‚ Ð±ÑƒÐ´ÐµÑ‚ Ñ‚Ð¾Ñ€Ð¼Ð¾Ð·Ð¸Ñ‚ÑŒ.",
+                 font=FONT_SMALL, bg=BG2, fg=TEXT_DIM, wraplength=290).pack(anchor="w", pady=(2, 4))
+        tk.Scale(body_cpu, variable=self.cpu_threads, from_=1, to=self._max_safe_cpu_threads(),
+                 orient="horizontal", bg=BG2, fg=TEXT, troughcolor=BG3,
+                 highlightthickness=0, bd=0, sliderlength=16,
+                 activebackground=PURPLE, font=FONT_SMALL,
+                 command=lambda v: self._apply_cpu_limit()).pack(fill="x")
+        default_t = safe_cpu_threads(DEFAULT_CPU_THREAD_PCT)
+        tk.Label(body_cpu,
+                 text=f"âœ… Ð”ÐµÑ„Ð¾Ð»Ñ‚ {default_t} Ð¸Ð· {cpu_total} ({DEFAULT_CPU_THREAD_PCT}% ÑÐ´ÐµÑ€) â€” Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾",
+                 font=FONT_SMALL, bg=BG2, fg=SUCCESS).pack(anchor="w", pady=(2, 0))
+
+        # â”€â”€ Ð¢ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð½Ñ‹Ð¹ Ð¿Ñ€ÐµÐ´Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÐµÐ»ÑŒ â”€â”€
+        body_temp = self._card(right, "Ð¢ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð½Ñ‹Ð¹ Ð¿Ñ€ÐµÐ´Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÐµÐ»ÑŒ", "ï¸")
+        tk.Label(body_temp,
+                 text="ÐŸÑ€Ð¾Ð³Ñ€Ð°Ð¼Ð¼Ð° Ð°Ð²Ñ‚Ð¾Ð¼Ð°Ñ‚Ð¸Ñ‡ÐµÑÐºÐ¸ ÑÑ‚Ð°Ð²Ð¸Ñ‚ Ð¿Ð°ÑƒÐ·Ñƒ ÐµÑÐ»Ð¸ Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð°\n"
+                      f"Ð¿Ñ€ÐµÐ²Ñ‹ÑˆÐ°ÐµÑ‚ Ð¿Ð¾Ñ€Ð¾Ð³, Ð¸ Ð¶Ð´Ñ‘Ñ‚ Ð¾Ñ…Ð»Ð°Ð¶Ð´ÐµÐ½Ð¸Ñ Ð½Ð° {TEMP_COOLDOWN_DELTA}Â°C Ð½Ð¸Ð¶Ðµ Ð¿Ð¾Ñ€Ð¾Ð³Ð°.",
+                 font=FONT_SMALL, bg=BG2, fg=TEXT_DIM, wraplength=290,
+                 justify="left").pack(anchor="w", pady=(0, 10))
+
+        for label, var, default, danger, max_allowed in [
+            ("ÐœÐ°ÐºÑ. Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð° CPU (Â°C):", self.temp_cpu_max, DEFAULT_CPU_TEMP_MAX, 90, Config.CPU_TEMP_MAX_C),
+            ("ÐœÐ°ÐºÑ. Ñ‚ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð° GPU (Â°C):", self.temp_gpu_max, DEFAULT_GPU_TEMP_MAX, 85, Config.GPU_TEMP_MAX_C),
+        ]:
+            tk.Label(body_temp, text=label,
+                     font=FONT_SMALL, bg=BG2, fg=TEXT_MED).pack(anchor="w", pady=(6, 0))
+            tk.Scale(body_temp, variable=var, from_=60, to=max_allowed,
+                     orient="horizontal", bg=BG2, fg=TEXT, troughcolor=BG3,
+                     highlightthickness=0, bd=0, sliderlength=16,
+                     activebackground=RED, font=FONT_SMALL).pack(fill="x")
+            tk.Label(body_temp,
+                     text=f"âœ… Ð”ÐµÑ„Ð¾Ð»Ñ‚ {default}Â°C  |  âš ï¸ Ð’Ñ‹ÑˆÐµ {danger}Â°C â€” Ñ‚Ñ€Ð¾Ñ‚Ñ‚Ð»Ð¸Ð½Ð³",
+                     font=FONT_SMALL, bg=BG2, fg=WARN).pack(anchor="w")
+
+        # â”€â”€ Ð˜Ð½Ñ„Ð¾ Ð¾ Ð±ÐµÐ·Ð¾Ð¿Ð°ÑÐ½Ð¾ÑÑ‚Ð¸ â”€â”€
+        body_safe = self._card(right, "Ð—Ð°Ñ‰Ð¸Ñ‚Ð° Ð¶ÐµÐ»ÐµÐ·Ð°", "ï¸")
+        tk.Label(body_safe,
+                 text="â€¢ CPU Ð·Ð°Ð³Ñ€ÑƒÐ¶ÐµÐ½ Ð¼Ð°ÐºÑÐ¸Ð¼ÑƒÐ¼ Ð½Ð° 60-70% Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ\n"
+                      "â€¢ GPU VRAM Ð»Ð¸Ð¼Ð¸Ñ‚ 60% â€” Ð¾ÑÑ‚Ð°Ð²Ð»ÑÐµÑ‚ Ð·Ð°Ð¿Ð°Ñ\n"
+                      "â€¢ VRAM Ð¿Ñ€Ð¾Ð²ÐµÑ€ÑÐµÑ‚ÑÑ Ð¿ÐµÑ€ÐµÐ´ ÐºÐ°Ð¶Ð´Ð¾Ð¹ Ð·Ð°Ð³Ñ€ÑƒÐ·ÐºÐ¾Ð¹ Ð¼Ð¾Ð´ÐµÐ»Ð¸\n"
+                      "â€¢ Ð•ÑÐ»Ð¸ VRAM Ð½Ðµ Ñ…Ð²Ð°Ñ‚Ð°ÐµÑ‚ â€” Ð°Ð²Ñ‚Ð¾Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡ÐµÐ½Ð¸Ðµ Ð½Ð° CPU\n"
+                      "â€¢ VRAM Ð¾Ñ‡Ð¸Ñ‰Ð°ÐµÑ‚ÑÑ Ð¿Ð¾ÑÐ»Ðµ ÐºÐ°Ð¶Ð´Ð¾Ð³Ð¾ Ð²Ð¸Ð´ÐµÐ¾\n"
+                      "â€¢ Ð¢ÐµÐ¼Ð¿ÐµÑ€Ð°Ñ‚ÑƒÑ€Ð½Ñ‹Ð¹ Ð¿Ñ€ÐµÐ´Ð¾Ñ…Ñ€Ð°Ð½Ð¸Ñ‚ÐµÐ»ÑŒ Ð°ÐºÑ‚Ð¸Ð²ÐµÐ½ Ð²ÑÐµÐ³Ð´Ð°\n"
+                      "â€¢ ÐŸÑ€Ð¸Ð¾Ñ€Ð¸Ñ‚ÐµÑ‚ Ð¿Ñ€Ð¾Ñ†ÐµÑÑÐ° Ð¿Ð¾Ð½Ð¸Ð¶ÐµÐ½ â€” ÑÐ¸ÑÑ‚ÐµÐ¼Ð° Ð½Ðµ Ñ‚Ð¾Ñ€Ð¼Ð¾Ð·Ð¸Ñ‚",
+                 font=FONT_SMALL, bg=BG2, fg=SUCCESS,
+                 justify="left", wraplength=290).pack(anchor="w")
+
+    # â”€â”€ ÐÐ¸Ð¶Ð½ÑÑ Ð¿Ð°Ð½ÐµÐ»ÑŒ (Ð²ÑÐµÐ³Ð´Ð° Ð²Ð¸Ð´Ð½Ð°) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+    def _build_bottom(self, parent):
+        bot = tk.Frame(parent, bg=BG, padx=20, pady=12)
+        bot.pack(fill="x", side="bottom")
+        bot.columnconfigure(0, weight=1)
+
+        btn_row = tk.Frame(bot, bg=BG); btn_row.pack(fill="x", pady=(0, 8))
+        self.btn_run = tk.Button(btn_row, text="Ð—ÐÐŸÐ£Ð¡Ð¢Ð˜Ð¢Ð¬ ÐÐÐ Ð•Ð—ÐšÐ£",
+                                 font=("Bahnschrift SemiBold", 13), bg=RED, fg=BG,
+                                 bd=0, pady=12, activebackground=RED2, activeforeground=BG,
+                                 highlightthickness=1, highlightbackground=BORDER, highlightcolor=RED2,
+                                 cursor="hand2", relief="flat", command=self._start)
+        self.btn_run.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        self.btn_pause = tk.Button(btn_row, text="ÐŸÐ°ÑƒÐ·Ð°",
+                                   font=FONT_BTN, bg=BG3, fg=TEXT_MED,
+                                   bd=0, pady=12, activebackground=BG4,
+                                   highlightthickness=1, highlightbackground=BORDER, highlightcolor=PURPLE2,
+                                   cursor="hand2", relief="flat",
+                                   command=self._toggle_pause, state="disabled", width=12)
+        self.btn_pause.pack(side="left")
+
+        prog = tk.Frame(bot, bg=BG2, padx=14, pady=10); prog.pack(fill="x", pady=(0, 8))
+        top = tk.Frame(prog, bg=BG2); top.pack(fill="x", pady=(0, 4))
+        tk.Label(top, text="EXPORT PROGRESS", font=FONT_SMALL, bg=BG2, fg=TEXT_DIM).pack(side="left")
+        self.lbl_progress = tk.Label(top, text="", font=FONT_SMALL, bg=BG2, fg=TEXT_MED)
+        self.lbl_progress.pack(side="right")
+        style = ttk.Style(); style.theme_use("default")
+        style.configure("X.Horizontal.TProgressbar",
+                         troughcolor=BG3, background=RED2, thickness=7, bordercolor=BG2)
+        self.progressbar = ttk.Progressbar(prog, variable=self.progress,
+                                            maximum=100, style="X.Horizontal.TProgressbar")
+        self.progressbar.pack(fill="x")
+
+        lo = tk.Frame(bot, bg=BG2); lo.pack(fill="x")
+        lh = tk.Frame(lo, bg=BG3, padx=12, pady=5); lh.pack(fill="x")
+        tk.Label(lh, text="SESSION LOG", font=FONT_LABEL, bg=BG3, fg=TEXT_DIM).pack(side="left")
+        tk.Frame(lo, bg=BORDER, height=1).pack(fill="x")
+        lb = tk.Frame(lo, bg=BG2); lb.pack(fill="x")
+        self.log = tk.Text(lb, bg=BG2, fg=TEXT, font=FONT_MONO, height=7, bd=0,
+                           padx=14, pady=8, state="disabled", wrap="word",
+                           insertbackground=PURPLE2)
+        sb2 = tk.Scrollbar(lb, command=self.log.yview, bg=BG2, troughcolor=BG2, width=6)
+        self.log.configure(yscrollcommand=sb2.set)
+        sb2.pack(side="right", fill="y"); self.log.pack(fill="x")
+        self.log.tag_config("info",    foreground=TEXT_MED)
+        self.log.tag_config("success", foreground=SUCCESS)
+        self.log.tag_config("error",   foreground=DANGER)
+        self.log.tag_config("accent",  foreground=PURPLE2)
+        self.log.tag_config("warn",    foreground=WARN)
+
+        self._log("âœ… FFmpeg Ð½Ð°Ð¹Ð´ÐµÐ½ â€” Ð³Ð¾Ñ‚Ð¾Ð² Ðº Ñ€Ð°Ð±Ð¾Ñ‚Ðµ!", "success")
+        if GPU.available:
+            self._log(f" {GPU.name} | VRAM {GPU.vram_total}MB | CUDA {GPU.cuda_version}", "accent")
+            self._log(f"ï¸ Ð›Ð¸Ð¼Ð¸Ñ‚ CPU {self.cpu_threads.get()} Ð¿Ð¾Ñ‚Ð¾ÐºÐ¾Ð² | GPU VRAM {self.gpu_vram_limit.get()}% | GPU Ð¿Ð¾Ñ€Ð¾Ð³ {self.temp_gpu_max.get()}Â°C", "info")
+        else:
+            self._log("âš ï¸ GPU Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½ â€” Ñ€Ð°Ð±Ð¾Ñ‚Ð°ÐµÐ¼ Ð½Ð° CPU", "warn")
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # Ð”Ð•Ð™Ð¡Ð¢Ð’Ð˜Ð¯
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _add_video(self):
+        paths = filedialog.askopenfilenames(
+            title="Ð’Ñ‹Ð±ÐµÑ€Ð¸ Ð²Ð¸Ð´ÐµÐ¾",
+            filetypes=[("Ð’Ð¸Ð´ÐµÐ¾", "*.mp4 *.mov *.avi *.mkv *.webm"), ("Ð’ÑÐµ", "*.*")])
+        for p in paths:
+            if p not in self.video_paths:
+                self.video_paths.append(p)
+                self.queue_listbox.insert("end", os.path.basename(p))
+                self._log(f"âž• {os.path.basename(p)}", "accent")
+
+    def _remove_video(self):
+        sel = self.queue_listbox.curselection()
+        if sel:
+            idx = sel[0]; self.queue_listbox.delete(idx); self.video_paths.pop(idx)
+
+    def _yt_in(self, e):
+        if self.yt_url.get() == "https://youtube.com/watch?v=...":
+            self.yt_entry.delete(0, "end"); self.yt_entry.configure(fg=TEXT)
+
+    def _yt_out(self, e):
+        if not self.yt_url.get().strip():
+            self.yt_entry.insert(0, "https://youtube.com/watch?v=...")
+            self.yt_entry.configure(fg=TEXT_DIM)
+
+    def _download_yt(self):
+        url = self.yt_url.get().strip()
+        if not url or url == "https://youtube.com/watch?v=...":
+            messagebox.showerror("ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð’ÑÑ‚Ð°Ð²ÑŒ ÑÑÑ‹Ð»ÐºÑƒ!"); return
+        try: import yt_dlp
+        except ImportError:
+            messagebox.showerror("ÐžÑˆÐ¸Ð±ÐºÐ°", "pip install yt-dlp"); return
+        self._log("â¬‡ï¸ Ð¡ÐºÐ°Ñ‡Ð¸Ð²Ð°ÑŽ...", "accent")
+        self.btn_run.configure(state="disabled")
+        def do():
+            try:
+                od = os.path.join(os.path.expanduser("~"), "Desktop", "yt_downloads")
+                os.makedirs(od, exist_ok=True)
+                opts = {"format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]",
+                        "outtmpl": os.path.join(od, "%(title)s.%(ext)s"),
+                        "ffmpeg_location": os.path.dirname(FFMPEG), "quiet": True}
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    fn   = ydl.prepare_filename(info)
+                self.video_paths.append(fn)
+                self.after(0, lambda: self.queue_listbox.insert("end", os.path.basename(fn)))
+                self._safe_log(f"âœ… {os.path.basename(fn)}", "success")
+            except Exception as ex:
+                self._safe_log(f"âŒ {ex}", "error")
+            finally:
+                self.after(0, lambda: self.btn_run.configure(state="normal"))
+        threading.Thread(target=do, daemon=True).start()
+
+    def _pick_folder(self):
+        p = filedialog.askdirectory()
+        if p: self.out_folder.set(p)
+
+    def _toggle_pause(self) -> None:
+        if not self.running: return
+        if self._state == AppState.PAUSED:
+            self._set_state(AppState.RUNNING)
+            self.pause_event.set()
+            self._worker.resume()
+            self.btn_pause.configure(text="â¸ ÐŸÐ°ÑƒÐ·Ð°", fg=TEXT_MED)
+            self._log("â–¶ï¸ ÐŸÑ€Ð¾Ð´Ð¾Ð»Ð¶Ð°ÐµÐ¼...", "accent")
+            logger.info("ÐŸÐ°ÑƒÐ·Ð° ÑÐ½ÑÑ‚Ð°")
+        else:
+            self._set_state(AppState.PAUSED)
+            self.pause_event.clear()
+            self._worker.pause()
+            self.btn_pause.configure(text="â–¶ ÐŸÑ€Ð¾Ð´Ð¾Ð»Ð¶Ð¸Ñ‚ÑŒ", fg=SUCCESS)
+            self._log("â¸ ÐŸÐ°ÑƒÐ·Ð° â€” Ð½Ð°Ð¶Ð¼Ð¸ Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð¸Ñ‚ÑŒ ÐºÐ¾Ð³Ð´Ð° Ð±ÑƒÐ´ÐµÑˆÑŒ Ð³Ð¾Ñ‚Ð¾Ð²", "warn")
+            logger.info("ÐŸÐ°ÑƒÐ·Ð° ÑƒÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð°")
+
+    def _start(self) -> None:
+        if self.running: return
+        if not self.video_paths:
+            messagebox.showerror("ÐžÑˆÐ¸Ð±ÐºÐ°", "Ð”Ð¾Ð±Ð°Ð²ÑŒ Ð²Ð¸Ð´ÐµÐ¾!"); return
+        if self.mode.get() not in ("split",) and self.min_dur.get() >= self.max_dur.get():
+            messagebox.showerror("ÐžÑˆÐ¸Ð±ÐºÐ°", "ÐœÐ¸Ð½.ÑÐµÐº Ð´Ð¾Ð»Ð¶ÐµÐ½ Ð±Ñ‹Ñ‚ÑŒ Ð¼ÐµÐ½ÑŒÑˆÐµ ÐœÐ°ÐºÑ.ÑÐµÐº!"); return
+
+        self._sanitize_safety_settings(source="start")
+        if str(self.fx_backend.get()).strip().lower() == "gpu" and not bool(self.use_gpu.get()):
+            self._safe_log("âš ï¸ Ð—ÐµÑ€ÐºÐ°Ð»Ð¾/Ð—ÑƒÐ¼/Ð¦Ð²ÐµÑ‚/9:16/Ð¡ÐºÐ¾Ñ€Ð¾ÑÑ‚ÑŒ Ð±ÑƒÐ´ÑƒÑ‚ Ð½Ð° CPU, Ñ‚.Ðº. Ð¾Ð±Ñ‰Ð¸Ð¹ GPU Ð²Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½", "warn")
+        self._safe_log(f"{self._runtime_pipeline_summary()}", "info")
+        self._apply_cpu_limit()
+        self._set_state(AppState.RUNNING)
+        self.stop_flag.clear()
+        self.pause_event.set()
+        self._set_progress(0)
+        self.btn_run.configure(state="disabled", bg=BG4, text="â³   ÐžÐ‘Ð ÐÐ‘ÐžÐ¢ÐšÐ...")
+        self.btn_pause.configure(state="normal")
+        logger.info(f"Ð—Ð°Ð¿ÑƒÑÐº Ð½Ð°Ñ€ÐµÐ·ÐºÐ¸: {len(self.video_paths)} Ð²Ð¸Ð´ÐµÐ¾, Ñ€ÐµÐ¶Ð¸Ð¼={self.mode.get()}")
+
+        # ÐšÐ»Ð°Ð´Ñ‘Ð¼ Ð²ÑÑŽ Ð¾Ñ‡ÐµÑ€ÐµÐ´ÑŒ Ð² worker â€” Ð¾Ð½ ÑÐ°Ð¼ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚Ð°ÐµÑ‚ Ð¿Ð¾ Ð¿Ð¾Ñ€ÑÐ´ÐºÑƒ
+        self._worker = VideoWorker(on_event=self._on_worker_event)
+        self._worker.submit(self._process_queue)
+        self._worker.start()
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # ÐžÐ‘Ð ÐÐ‘ÐžÐ¢ÐšÐ ÐžÐ§Ð•Ð Ð•Ð”Ð˜
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _process_queue(self) -> None:
+        total = len(self.video_paths); t0 = time.time()
+        logger.info(f"ÐÐ°Ñ‡Ð¸Ð½Ð°ÑŽ Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÑƒ Ð¾Ñ‡ÐµÑ€ÐµÐ´Ð¸: {total} Ð²Ð¸Ð´ÐµÐ¾")
+        try:
+            for idx, vp in enumerate(self.video_paths):
+                if self.stop_flag.is_set():
+                    logger.info("ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½Ð° Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼")
+                    break
+                self._safe_log(f"\n Ð’Ð¸Ð´ÐµÐ¾ {idx + 1}/{total}: {os.path.basename(vp)}", "accent")
+                logger.info(f"ÐžÐ±Ñ€Ð°Ð±Ð°Ñ‚Ñ‹Ð²Ð°ÑŽ [{idx+1}/{total}]: {vp}")
+                mode = self.mode.get()
+                if mode == "split":
+                    self._process_split(vp, t0)
+                elif mode == "hybrid":
+                    self._process_hybrid(vp, t0)
+                else:
+                    self._process_one(vp, t0)
+                GPU.clear_vram()
+                self._throttle()
+        except Exception as e:
+            logger.exception(f"ÐšÑ€Ð¸Ñ‚Ð¸Ñ‡ÐµÑÐºÐ°Ñ Ð¾ÑˆÐ¸Ð±ÐºÐ° Ð² Ð¾Ñ‡ÐµÑ€ÐµÐ´Ð¸: {e}")
+            self._safe_log(f"âŒ ÐšÑ€Ð¸Ñ‚Ð¸Ñ‡ÐµÑÐºÐ°Ñ Ð¾ÑˆÐ¸Ð±ÐºÐ°: {e}", "error")
+        finally:
+            elapsed = int(time.time() - t0)
+            interrupted = self.stop_flag.is_set()
+            if interrupted:
+                self._safe_progress(0, f"ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ Ñ‡ÐµÑ€ÐµÐ· {elapsed}Ñ")
+                self._safe_log(f"\nâ¹ ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼ Ñ‡ÐµÑ€ÐµÐ· {elapsed}Ñ", "warn")
+                logger.info(f"ÐžÑ‡ÐµÑ€ÐµÐ´ÑŒ Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð»ÐµÐ½Ð° Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼ Ñ‡ÐµÑ€ÐµÐ· {elapsed}Ñ")
+            else:
+                self._safe_progress(100, f"Ð“Ð¾Ñ‚Ð¾Ð²Ð¾ Ð·Ð° {elapsed}Ñ")
+                self._safe_log(f"\nâœ… Ð“Ð¾Ñ‚Ð¾Ð²Ð¾! {total} Ð²Ð¸Ð´ÐµÐ¾ Ð·Ð° {elapsed}Ñ", "success")
+                logger.info(f"ÐžÑ‡ÐµÑ€ÐµÐ´ÑŒ Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð° Ð·Ð° {elapsed}Ñ")
+            self._set_state(AppState.IDLE)
+            if not interrupted:
+                self.after(0, lambda: open_folder(self.out_folder.get()))
+            self.after(0, lambda: self.btn_run.configure(
+                state="normal", bg=RED, text="â–¶   Ð—ÐÐŸÐ£Ð¡Ð¢Ð˜Ð¢Ð¬ ÐÐÐ Ð•Ð—ÐšÐ£"))
+            self.after(0, lambda: self.btn_pause.configure(state="disabled"))
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # ÐÐÐ Ð•Ð—ÐšÐ ÐŸÐž Ð’Ð Ð•ÐœÐ•ÐÐ˜
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _process_split(self, video_path: str, t0: float) -> None:
+        """ÐÐ°Ñ€ÐµÐ·ÐºÐ° Ð¿Ð¾ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð¸ Ð±ÐµÐ· AI â€” Ð¿Ñ€Ð¾ÑÑ‚Ð¾ Ñ€ÐµÐ¶ÐµÑ‚ Ñ€Ð°Ð²Ð½Ñ‹Ð¼Ð¸ ÐºÑƒÑÐºÐ°Ð¼Ð¸."""
+        try:
+            out_folder = self.out_folder.get()
+            clip_dur   = self.split_dur.get()
+            duration   = self._get_duration(video_path)
+            if duration == 0: raise RuntimeError("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ð¿Ñ€ÐµÐ´ÐµÐ»Ð¸Ñ‚ÑŒ Ð´Ð»Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚ÑŒ")
+            self._safe_log(f"â±ï¸ {int(duration // 60)}:{int(duration % 60):02d}")
+
+            starts = list(range(0, int(duration), clip_dur))
+            if self.split_limit.get(): starts = starts[:self.num_clips.get()]
+
+            os.makedirs(out_folder, exist_ok=True)
+            base = os.path.splitext(os.path.basename(video_path))[0][:20]
+            self._safe_log(f"âœ‚ï¸ ÐÐ°Ñ€ÐµÐ·Ð°ÑŽ {len(starts)} ÐºÐ»Ð¸Ð¿Ð¾Ð² Ð¿Ð¾ {clip_dur}Ñ...", "accent")
+            logger.info(f"ÐÐ°Ñ€ÐµÐ·ÐºÐ° Ð¿Ð¾ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð¸: {len(starts)} ÐºÐ»Ð¸Ð¿Ð¾Ð² Ð¿Ð¾ {clip_dur}Ñ")
+
+            for i, s in enumerate(starts, 1):
+                if self.stop_flag.is_set():
+                    logger.info("ÐÐ°Ñ€ÐµÐ·ÐºÐ° Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½Ð° Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼")
+                    break
+                if not self._wait_if_paused(): break
+                e   = min(s + clip_dur, duration)
+                out = os.path.join(out_folder, f"{base}_part_{i:03d}.mp4")
+                self._safe_progress(
+                    int(i / len(starts) * 100),
+                    f"ÐšÐ»Ð¸Ð¿ {i}/{len(starts)} | {int(time.time() - t0)}Ñ")
+                self._safe_log(
+                    f"  [{i}/{len(starts)}] {int(s // 60):02d}:{int(s % 60):02d}"
+                    f" â†’ {int(e // 60):02d}:{int(e % 60):02d}")
+                self._ffmpeg_cut(video_path, s, e - s, out)
+        except Exception as e:
+            logger.exception(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð½Ð°Ñ€ÐµÐ·ÐºÐ¸ Ð¿Ð¾ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð¸: {e}")
+            self._safe_log(f"âŒ ÐžÑˆÐ¸Ð±ÐºÐ°: {e}", "error")
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # Ð“Ð˜Ð‘Ð Ð˜Ð” Ð Ð•Ð–Ð˜Ðœ
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _process_hybrid(self, video_path, t0):
+        """CPU + GPU Ñ€Ð°Ð±Ð¾Ñ‚Ð°ÑŽÑ‚ Ð¿Ð°Ñ€Ð°Ð»Ð»ÐµÐ»ÑŒÐ½Ð¾ Ð² Ð¾Ñ‚Ð´ÐµÐ»ÑŒÐ½Ñ‹Ñ… Ð¿Ð¾Ñ‚Ð¾ÐºÐ°Ñ…."""
+        tmp_audio = None
+        try:
+            duration = self._get_duration(video_path)
+            if duration == 0: raise Exception("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ð¿Ñ€ÐµÐ´ÐµÐ»Ð¸Ñ‚ÑŒ Ð´Ð»Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚ÑŒ")
+            self._safe_log(
+                f"â±ï¸ {int(duration // 60)}:{int(duration % 60):02d} â€” Ð“Ð¸Ð±Ñ€Ð¸Ð´ Ñ€ÐµÐ¶Ð¸Ð¼")
+
+            self._safe_progress(5, "Ð˜Ð·Ð²Ð»ÐµÐºÐ°ÑŽ Ð°ÑƒÐ´Ð¸Ð¾...")
+            tmp_audio = self._extract_audio(video_path)
+            energy    = self._calc_energy(tmp_audio, duration)
+            ns        = int(duration)
+
+            cpu_res = {}; gpu_res = {}
+            motion_gpu = self._is_motion_gpu_enabled()
+
+            def cpu_worker():
+                if not self._wait_if_paused(): return
+                if self.stop_flag.is_set(): return
+                if self.opt_motion.get() and not motion_gpu:
+                    self._safe_log(" CPU: Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ...", "info")
+                    cpu_res["motion"] = self._analyze_motion(video_path, duration)
+                    self._throttle()
+                if self.stop_flag.is_set(): return
+                if self.opt_laugh.get():
+                    cpu_res["laugh"] = self._analyze_laugh(energy)
+                cpu_res["audio"] = normalize(energy)
+                self._safe_log("âœ… CPU Ð°Ð½Ð°Ð»Ð¸Ð· Ð·Ð°Ð²ÐµÑ€ÑˆÑ‘Ð½", "success")
+
+            def gpu_worker():
+                if not self._wait_if_paused(): return
+                if self.stop_flag.is_set(): return
+                if self.opt_motion.get() and motion_gpu:
+                    self._safe_log(" GPU: Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ...", "info")
+                    gpu_res["motion"] = self._analyze_motion(video_path, duration)
+                    self._check_and_wait_temp()
+                    self._throttle()
+                if not self._wait_if_paused(): return
+                if self.stop_flag.is_set(): return
+                if self.opt_whisper.get():
+                    device = self._check_vram(500, "Whisper")
+                    self._safe_log(f" Whisper ({device.upper()})...", "info")
+                    gpu_res["speech"] = self._analyze_speech_faster(tmp_audio, duration, device)
+                    self._check_and_wait_temp()
+                    self._throttle()
+                if not self._wait_if_paused(): return
+                if self.stop_flag.is_set(): return
+                if self.opt_faces.get():
+                    device = self._check_vram(300, "Face Detector")
+                    self._safe_log(f" Ð›Ð¸Ñ†Ð° (GPU Ð¿Ñ€Ð¸ Ð²Ð¾Ð·Ð¼Ð¾Ð¶Ð½Ð¾ÑÑ‚Ð¸, {device.upper()})...", "info")
+                    gpu_res["faces"] = self._analyze_faces(video_path, duration)
+                    self._check_and_wait_temp()
+                self._safe_log("âœ… GPU Ð°Ð½Ð°Ð»Ð¸Ð· Ð·Ð°Ð²ÐµÑ€ÑˆÑ‘Ð½", "success")
+
+            self._safe_progress(15, "Ð“Ð¸Ð±Ñ€Ð¸Ð´ Ð°Ð½Ð°Ð»Ð¸Ð· (CPU + GPU Ð¿Ð°Ñ€Ð°Ð»Ð»ÐµÐ»ÑŒÐ½Ð¾)...")
+            t_cpu = threading.Thread(target=cpu_worker, daemon=True)
+            t_gpu = threading.Thread(target=gpu_worker, daemon=True)
+            t_cpu.start(); t_gpu.start()
+            t_cpu.join();  t_gpu.join()
+
+            # Ð¤Ð¸ÐºÑ #2: Ð¿Ð¾ÑÐ»Ðµ join Ð¿Ñ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ emergency stop
+            if self.stop_flag.is_set():
+                logger.info("Ð“Ð¸Ð±Ñ€Ð¸Ð´: Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½ Ð¿Ð¾ÑÐ»Ðµ Ð°Ð½Ð°Ð»Ð¸Ð·Ð° (stop_flag)")
+                return
+
+            score = np.zeros(ns)
+            score = safe_add(score, cpu_res.get("audio"),        self.w_audio.get())
+            score = safe_add(score, cpu_res.get("laugh"),        self.w_laugh.get())
+            score = safe_add(score, cpu_res.get("motion"),       self.w_motion.get())
+            score = safe_add(score, gpu_res.get("motion"),       self.w_motion.get())
+            score = safe_add(score, gpu_res.get("speech"),       self.w_speech.get())
+            score = safe_add(score, gpu_res.get("faces"),        self.w_faces.get())
+
+            GPU.clear_vram()
+            self._cut_clips(score, video_path, duration, ns, t0)
+
+        except Exception as ex:
+            logger.exception(f"Ð“Ð¸Ð±Ñ€Ð¸Ð´ Ð¾ÑˆÐ¸Ð±ÐºÐ°: {ex}")
+            self._safe_log(f"âŒ Ð“Ð¸Ð±Ñ€Ð¸Ð´ Ð¾ÑˆÐ¸Ð±ÐºÐ°: {ex}", "error")
+        finally:
+            # Ð¤Ð¸ÐºÑ #6: Ð³Ð°Ñ€Ð°Ð½Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¹ cleanup
+            if tmp_audio:
+                try: os.remove(tmp_audio)
+                except Exception as cleanup_err:
+                    logger.debug(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÑŒ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ð¹ Ñ„Ð°Ð¹Ð» {tmp_audio}: {cleanup_err}")
+            GPU.clear_vram()
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # Ð¡Ð¢ÐÐÐ”ÐÐ Ð¢ÐÐ«Ð™ Ð Ð•Ð–Ð˜Ðœ (fast / balanced / full)
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _check_stop_or_pause(self) -> bool:
+        """
+        Ð’ÑÐ¿Ð¾Ð¼Ð¾Ð³Ð°Ñ‚ÐµÐ»ÑŒÐ½Ñ‹Ð¹ Ð¼ÐµÑ‚Ð¾Ð´: Ð¿Ñ€Ð¾Ð²ÐµÑ€ÑÐµÑ‚ Ð¿Ð°ÑƒÐ·Ñƒ Ð¸ emergency stop (Ñ„Ð¸ÐºÑ #1, #2).
+        Ð’Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ True ÐµÑÐ»Ð¸ Ð½ÑƒÐ¶Ð½Ð¾ Ð¿Ñ€Ð¾Ð´Ð¾Ð»Ð¶Ð¸Ñ‚ÑŒ, False ÐµÑÐ»Ð¸ Ð½ÑƒÐ¶Ð½Ð¾ Ð¾ÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒÑÑ.
+        """
+        if self.stop_flag.is_set():
+            return False
+        return self._wait_if_paused()
+
+    def _process_one(self, video_path, t0):
+        tmp_audio = None
+        try:
+            mode     = self.mode.get()
+            duration = self._get_duration(video_path)
+            if duration == 0: raise Exception("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¾Ð¿Ñ€ÐµÐ´ÐµÐ»Ð¸Ñ‚ÑŒ Ð´Ð»Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚ÑŒ")
+            self._safe_log(f"â±ï¸ {int(duration // 60)}:{int(duration % 60):02d}")
+
+            # ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð´Ð¾ ÑÑ‚Ð°Ñ€Ñ‚Ð°
+            if not self._check_stop_or_pause(): return
+
+            self._safe_progress(5, "Ð˜Ð·Ð²Ð»ÐµÐºÐ°ÑŽ Ð°ÑƒÐ´Ð¸Ð¾...")
+            tmp_audio = self._extract_audio(video_path)
+
+            if not self._check_stop_or_pause(): return
+            energy = self._calc_energy(tmp_audio, duration)
+            ns     = int(duration)
+            score  = normalize(energy) * self.w_audio.get()
+
+            if not self._check_stop_or_pause(): return
+            if mode in ("balanced", "full") and self.opt_laugh.get():
+                self._safe_progress(15, f"Ð¡Ð¼ÐµÑ…... {int(time.time() - t0)}Ñ")
+                score = safe_add(score, self._analyze_laugh(energy), self.w_laugh.get())
+                self._throttle()
+
+            if not self._check_stop_or_pause(): return
+            if mode in ("balanced", "full") and self.opt_motion.get():
+                self._safe_progress(30, f"Ð”Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ... {int(time.time() - t0)}Ñ")
+                score = safe_add(score, self._analyze_motion(video_path, duration), self.w_motion.get())
+                self._check_and_wait_temp()
+                self._throttle()
+
+            if not self._check_stop_or_pause(): return
+            if mode == "full" and self.opt_whisper.get():
+                self._safe_progress(45, f"Ð ÐµÑ‡ÑŒ... {int(time.time() - t0)}Ñ")
+                score = safe_add(score, self._analyze_speech(tmp_audio, duration), self.w_speech.get())
+                self._check_and_wait_temp()
+                self._throttle()
+
+            if not self._check_stop_or_pause(): return
+            if mode == "full" and self.opt_faces.get():
+                self._safe_progress(60, f"Ð›Ð¸Ñ†Ð°... {int(time.time() - t0)}Ñ")
+                score = safe_add(score, self._analyze_faces(video_path, duration), self.w_faces.get())
+                self._check_and_wait_temp()
+
+            if not self._check_stop_or_pause(): return
+            GPU.clear_vram()
+            self._cut_clips(score, video_path, duration, ns, t0)
+
+        except Exception as ex:
+            logger.exception(f"ÐžÑˆÐ¸Ð±ÐºÐ° _process_one: {ex}")
+            self._safe_log(f"âŒ ÐžÑˆÐ¸Ð±ÐºÐ°: {ex}", "error")
+        finally:
+            # Ð“Ð°Ñ€Ð°Ð½Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¹ cleanup (Ñ„Ð¸ÐºÑ #6)
+            if tmp_audio:
+                try: os.remove(tmp_audio)
+                except Exception as cleanup_err:
+                    logger.debug(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÑŒ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ð¹ Ñ„Ð°Ð¹Ð» {tmp_audio}: {cleanup_err}")
+            GPU.clear_vram()
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # ÐÐÐ Ð•Ð—ÐšÐ ÐšÐ›Ð˜ÐŸÐžÐ’
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _cut_clips(self, score: np.ndarray, video_path: str, duration: float, ns: int, t0: float) -> None:
+        """ÐÐ°Ñ…Ð¾Ð´Ð¸Ñ‚ Ð»ÑƒÑ‡ÑˆÐ¸Ðµ Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ñ‹ Ð¿Ð¾ score Ð¸ Ð½Ð°Ñ€ÐµÐ·Ð°ÐµÑ‚ ÐºÐ»Ð¸Ð¿Ñ‹."""
+        num_clips  = self.num_clips.get()
+        min_dur    = self.min_dur.get()
+        max_dur    = self.max_dur.get()
+        out_folder = self.out_folder.get()
+
+        self._safe_progress(70, f"Ð˜Ñ‰Ñƒ Ð»ÑƒÑ‡ÑˆÐ¸Ðµ Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ñ‹... {int(time.time() - t0)}Ñ")
+        score = np.clip(score / max(np.max(score), 1), 0, 1)
+        score = smooth(score, k=5)
+
+        if np.max(score) == 0:
+            logger.warning("Score Ð¿ÑƒÑÑ‚Ð¾Ð¹ â€” Ð½Ð°Ñ€ÐµÐ·Ð°ÑŽ Ñ€Ð°Ð²Ð½Ð¾Ð¼ÐµÑ€Ð½Ð¾")
+            cl = (min_dur + max_dur) // 2
+            selected = [(s, s + cl) for s in range(0, ns - cl, max(cl, MIN_GAP + 1))][:num_clips]
+        else:
+            windows = []
+            for s in range(ns):
+                cl = int(np.random.randint(min_dur, max_dur + 1))
+                e  = s + cl
+                if e > ns: break
+                seg = score[s:e]
+                windows.append((s, e, float(np.mean(seg) * 0.5 + np.max(seg) * 0.5)))
+            windows.sort(key=lambda x: x[2], reverse=True)
+            selected = []
+            for s, e, _ in windows:
+                if not any(not (e + MIN_GAP <= ss or s - MIN_GAP >= ee) for ss, ee in selected):
+                    selected.append((s, e))
+                if len(selected) >= num_clips: break
+            selected.sort()
+            logger.info(f"ÐÐ°Ð¹Ð´ÐµÐ½Ð¾ {len(selected)} Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð² Ð¸Ð· {num_clips} Ð·Ð°Ð¿Ñ€Ð¾ÑˆÐµÐ½Ð½Ñ‹Ñ…")
+
+        if not selected:
+            self._safe_log("âš ï¸ ÐÐµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾ Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð².", "error")
+            logger.warning("ÐÐµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð¾ Ð½Ð¸ Ð¾Ð´Ð½Ð¾Ð³Ð¾ Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð° Ð´Ð»Ñ Ð½Ð°Ñ€ÐµÐ·ÐºÐ¸")
+            return
+
+        os.makedirs(out_folder, exist_ok=True)
+        base = os.path.splitext(os.path.basename(video_path))[0][:20]
+        self._safe_log(f"âœ‚ï¸ ÐÐ°Ñ€ÐµÐ·Ð°ÑŽ {len(selected)} ÐºÐ»Ð¸Ð¿Ð¾Ð²...", "accent")
+
+        for i, (s, e) in enumerate(selected, 1):
+            if self.stop_flag.is_set():
+                logger.info("ÐÐ°Ñ€ÐµÐ·ÐºÐ° Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½Ð° Ð¿Ð¾Ð»ÑŒÐ·Ð¾Ð²Ð°Ñ‚ÐµÐ»ÐµÐ¼")
+                break
+            if not self._wait_if_paused(): break
+            self._check_and_wait_temp()
+            e   = min(e, duration)
+            out = os.path.join(out_folder, f"{base}_clip_{i:02d}.mp4")
+            self._safe_progress(
+                70 + int(i / len(selected) * 28),
+                f"ÐšÐ»Ð¸Ð¿ {i}/{len(selected)} | {int(time.time() - t0)}Ñ")
+            self._safe_log(
+                f"  [{i}/{len(selected)}] "
+                f"{int(s // 60):02d}:{int(s % 60):02d} â†’ {int(e // 60):02d}:{int(e % 60):02d}")
+            logger.info(f"ÐšÐ»Ð¸Ð¿ {i}: {s:.0f}Ñ â†’ {e:.0f}Ñ â†’ {out}")
+            self._ffmpeg_cut(video_path, s, e - s, out)
+            self._throttle()
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # FFMPEG Ð¥Ð•Ð›ÐŸÐ•Ð Ð«
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _get_duration(self, video_path: str) -> float:
+        """ÐŸÐ¾Ð»ÑƒÑ‡Ð°ÐµÑ‚ Ð´Ð»Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚ÑŒ Ð²Ð¸Ð´ÐµÐ¾ Ñ‡ÐµÑ€ÐµÐ· ffprobe Ñ Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚Ð¾Ð¼."""
+        try:
+            res = subprocess.run(
+                [FFPROBE, "-v", "quiet", "-print_format", "json", "-show_format", video_path],
+                capture_output=True, text=True,
+                creationflags=NO_WINDOW,
+                timeout=Config.PROBE_TIMEOUT)
+            info     = json.loads(res.stdout)
+            duration = float(info["format"].get("duration", 0) or 0)
+            logger.info(f"Ð”Ð»Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚ÑŒ {os.path.basename(video_path)}: {duration:.1f}Ñ")
+            return duration
+        except subprocess.TimeoutExpired:
+            logger.error(f"ffprobe Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚ Ð´Ð»Ñ {video_path}")
+            return 0
+        except Exception as e:
+            logger.error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð¿Ð¾Ð»ÑƒÑ‡ÐµÐ½Ð¸Ñ Ð´Ð»Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾ÑÑ‚Ð¸ {video_path}: {e}")
+            return 0
+
+    def _extract_audio(self, video_path: str) -> str:
+        """Ð˜Ð·Ð²Ð»ÐµÐºÐ°ÐµÑ‚ Ð°ÑƒÐ´Ð¸Ð¾ Ð² WAV Ñ„Ð°Ð¹Ð» Ñ retry. Ð‘Ñ€Ð¾ÑÐ°ÐµÑ‚ AudioError ÐµÑÐ»Ð¸ Ð½Ðµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ."""
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_audio = tmp.name
+        logger.info(f"Ð˜Ð·Ð²Ð»ÐµÐºÐ°ÑŽ Ð°ÑƒÐ´Ð¸Ð¾ Ð¸Ð· {os.path.basename(video_path)}...")
+
+        def _attempt():
+            r = subprocess.run(
+                [FFMPEG, "-y", "-threads", str(max(1, self.cpu_threads.get())),
+                 "-i", video_path,
+                 "-vn", "-acodec", "pcm_s16le", "-ar", "22050", "-ac", "1", tmp_audio],
+                capture_output=True, creationflags=NO_WINDOW, timeout=1800)
+            if r.returncode != 0:
+                raise AudioError(f"FFmpeg ÐºÐ¾Ð´ {r.returncode}: {r.stderr.decode(errors='ignore')[:80]}")
+            return tmp_audio
+
+        try:
+            result = with_retry(_attempt, retries=1, delay=3.0,
+                                error_cls=AudioError, context="extract_audio")
+            logger.info(f"ÐÑƒÐ´Ð¸Ð¾ Ð¸Ð·Ð²Ð»ÐµÑ‡ÐµÐ½Ð¾: {tmp_audio}")
+            return result
+        except Exception as e:
+            try: os.remove(tmp_audio)
+            except Exception as cleanup_err:
+                logger.debug(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑƒÐ´Ð°Ð»Ð¸Ñ‚ÑŒ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð½Ñ‹Ð¹ Ñ„Ð°Ð¹Ð» {tmp_audio}: {cleanup_err}")
+            raise AudioError(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¸Ð·Ð²Ð»ÐµÑ‡ÑŒ Ð°ÑƒÐ´Ð¸Ð¾: {e}", recoverable=False)
+
+    def _calc_energy(self, tmp_audio: str, duration: float) -> np.ndarray:
+        """Ð’Ñ‹Ñ‡Ð¸ÑÐ»ÑÐµÑ‚ ÑÐ½ÐµÑ€Ð³Ð¸ÑŽ Ð°ÑƒÐ´Ð¸Ð¾ Ð¿Ð¾ ÑÐµÐºÑƒÐ½Ð´Ð°Ð¼."""
+        with wave.open(tmp_audio, 'rb') as wf:
+            fpa = wf.getframerate()
+            raw = wf.readframes(wf.getnframes())
+            arr = np.frombuffer(raw, dtype=np.int16).astype(np.float32)
+            if len(arr) > Config.AUDIO_MAX_SAMPLES:
+                arr = arr[:Config.AUDIO_MAX_SAMPLES]
+        ns = int(duration); energy = np.zeros(ns)
+        for i in range(ns):
+            chunk = arr[i * fpa:min(i * fpa + fpa, len(arr))]
+            if len(chunk) > 0:
+                energy[i] = float(np.sqrt(np.mean(chunk ** 2)))
+        return energy
+
+    def _build_vf(self):
+        """
+        ÐŸÑ€Ð°Ð²Ð¸Ð»ÑŒÐ½Ñ‹Ð¹ Ð¿Ð¾Ñ€ÑÐ´Ð¾Ðº Ñ„Ð¸Ð»ÑŒÑ‚Ñ€Ð¾Ð² FFmpeg:
+        Ð·ÑƒÐ¼ â†’ Ð·ÐµÑ€ÐºÐ°Ð»Ð¾ â†’ Ñ†Ð²ÐµÑ‚ â†’ Ð²ÐµÑ€Ñ‚Ð¸ÐºÐ°Ð»ÑŒÐ½Ñ‹Ð¹ â†’ ÑÐºÐ¾Ñ€Ð¾ÑÑ‚ÑŒ
+        Ð¡ÑƒÐ±Ñ‚Ð¸Ñ‚Ñ€Ñ‹ Ð²Ð¶Ð¸Ð³Ð°ÑŽÑ‚ÑÑ Ð¾Ñ‚Ð´ÐµÐ»ÑŒÐ½Ð¾ Ð´Ð¾ Ð·ÐµÑ€ÐºÐ°Ð»Ð°.
+        """
+        f = []
+        if self.opt_zoom.get():
+            f.append("zoompan=z='1.02':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1920x1080")
+        if self.opt_mirror.get():
+            f.append("hflip")
+        if self.opt_color.get():
+            f.append("eq=contrast=1.05:brightness=0.03:saturation=1.2")
+        if self.opt_vertical.get():
+            f.append("crop=ih*9/16:ih,scale=1080:1920")
+
+        speed = self.speed_val.get()
+        if speed != "1x":
+            sp = {"0.5x": 0.5, "1.5x": 1.5, "2x": 2.0}.get(speed, 1.0)
+            f.append(f"setpts={1/sp:.4f}*PTS")
+
+        return ",".join(f) if f else None
+
+    def _effective_fx_backend(self) -> str:
+        """ÐšÐ°ÐºÐ¾Ð¹ backend Ñ€ÐµÐ°Ð»ÑŒÐ½Ð¾ Ð¿Ñ€Ð¸Ð¼ÐµÐ½ÑÐµÐ¼ Ð´Ð»Ñ ÑÑ„Ñ„ÐµÐºÑ‚Ð¾Ð² Ð¸ ÑÐºÐ¾Ñ€Ð¾ÑÑ‚Ð¸: cpu Ð¸Ð»Ð¸ gpu."""
+        requested = str(self.fx_backend.get()).strip().lower()
+        if requested not in ("cpu", "gpu"):
+            requested = "gpu" if GPU.available else "cpu"
+        if requested == "gpu" and (not GPU.available or not bool(self.use_gpu.get())):
+            return "cpu"
+        return requested
+
+    def _detect_motion_gpu_capability(self, force: bool = False) -> bool:
+        """
+        ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÑ‚, Ð¼Ð¾Ð¶ÐµÑ‚ Ð»Ð¸ OpenCV CUDA Ñ€ÐµÐ°Ð»ÑŒÐ½Ð¾ Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÑÑ‚ÑŒ Ð°Ð½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ.
+        ÐšÐµÑˆÐ¸Ñ€ÑƒÐµÐ¼ Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð½Ðµ Ð´Ñ‘Ñ€Ð³Ð°Ñ‚ÑŒ Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÑƒ Ð½Ð° ÐºÐ°Ð¶Ð´Ñ‹Ð¹ redraw UI.
+        """
+        if self._motion_gpu_cap_checked and not force:
+            return bool(self._motion_gpu_capable)
+
+        capable = False
+        try:
+            import cv2
+            cuda_count = 0
+            if hasattr(cv2, "cuda") and hasattr(cv2.cuda, "getCudaEnabledDeviceCount"):
+                try:
+                    cuda_count = int(cv2.cuda.getCudaEnabledDeviceCount())
+                except Exception:
+                    cuda_count = 0
+            capable = (
+                cuda_count > 0 and
+                hasattr(cv2, "cuda_GpuMat") and
+                hasattr(cv2.cuda, "cvtColor") and
+                hasattr(cv2.cuda, "resize") and
+                hasattr(cv2.cuda, "absdiff")
+            )
+        except Exception as e:
+            logger.debug(f"Motion GPU capability check failed: {e}")
+            capable = False
+
+        self._motion_gpu_capable = bool(capable)
+        self._motion_gpu_cap_checked = True
+        return bool(capable)
+
+    def _is_motion_gpu_enabled(self) -> bool:
+        """Ð”Ð¾Ð»Ð¶ÐµÐ½ Ð»Ð¸ Ð°Ð½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ Ð¸Ð´Ñ‚Ð¸ Ð¿Ð¾ GPU Ð½Ð° Ñ‚ÐµÐºÑƒÑ‰Ð¸Ñ… Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ°Ñ…."""
+        if self._effective_fx_backend() != "gpu":
+            return False
+        return self._detect_motion_gpu_capability()
+
+    def _analysis_backend_summary(self) -> str:
+        """ÐšÑ€Ð°Ñ‚ÐºÐ¾: Ð³Ð´Ðµ Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÑÐµÑ‚ÑÑ Ð­Ñ‚Ð°Ð¿ 1 (Ð¿Ð¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²) Ð´Ð»Ñ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ð¾Ð³Ð¾ Ñ€ÐµÐ¶Ð¸Ð¼Ð°."""
+        mode = str(self.mode.get()).strip().lower()
+        gpu_ai_available = bool(GPU.available) and bool(self.use_gpu.get())
+        motion_gpu = bool(self.opt_motion.get()) and self._is_motion_gpu_enabled()
+        gpu_ai_components_enabled = bool(self.opt_whisper.get() or self.opt_faces.get())
+        if mode == "fast":
+            return "1) ÐŸÐ¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²: CPU (Ñ€ÐµÐ¶Ð¸Ð¼ Ð‘Ñ‹ÑÑ‚Ñ€Ñ‹Ð¹)"
+        if mode == "balanced":
+            if motion_gpu:
+                return "1) ÐŸÐ¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²: CPU + GPU (Ñ€ÐµÐ¶Ð¸Ð¼ Ð‘Ð°Ð»Ð°Ð½Ñ, Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ Ð½Ð° GPU)"
+            return "1) ÐŸÐ¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²: CPU (Ñ€ÐµÐ¶Ð¸Ð¼ Ð‘Ð°Ð»Ð°Ð½Ñ)"
+        if mode == "hybrid":
+            hybrid_gpu = motion_gpu or (gpu_ai_available and gpu_ai_components_enabled)
+            if hybrid_gpu:
+                return "1) ÐŸÐ¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²: CPU + GPU (Ñ€ÐµÐ¶Ð¸Ð¼ Ð“Ð¸Ð±Ñ€Ð¸Ð´)"
+            if gpu_ai_available and not gpu_ai_components_enabled and not motion_gpu:
+                return "1) ÐŸÐ¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²: CPU (Ñ€ÐµÐ¶Ð¸Ð¼ Ð“Ð¸Ð±Ñ€Ð¸Ð´, GPU-ÐºÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ñ‹ AI Ð²Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½Ñ‹)"
+            return "1) ÐŸÐ¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²: CPU (Ñ€ÐµÐ¶Ð¸Ð¼ Ð“Ð¸Ð±Ñ€Ð¸Ð´, GPU Ð´Ð»Ñ AI Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½/Ð²Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½)"
+        if mode == "full":
+            full_gpu = motion_gpu or (self.opt_faces.get() and gpu_ai_available)
+            if full_gpu:
+                return "1) ÐŸÐ¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²: CPU + GPU (Ñ€ÐµÐ¶Ð¸Ð¼ ÐŸÐ¾Ð»Ð½Ñ‹Ð¹, Ñ‡Ð°ÑÑ‚ÑŒ ÐºÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ð¾Ð² Ð½Ð° GPU)"
+            return "1) ÐŸÐ¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²: CPU (Ñ€ÐµÐ¶Ð¸Ð¼ ÐŸÐ¾Ð»Ð½Ñ‹Ð¹)"
+        if mode == "split":
+            return "1) ÐŸÐ¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²: Ð²Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½ (Ñ€ÐµÐ¶Ð¸Ð¼ ÐŸÐ¾ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð¸)"
+        return "1) ÐŸÐ¾Ð¸ÑÐº Ð¼Ð¾Ð¼ÐµÐ½Ñ‚Ð¾Ð²: CPU"
+
+    def _effects_backend_summary(self) -> str:
+        """ÐšÑ€Ð°Ñ‚ÐºÐ¾: Ð³Ð´Ðµ Ð²Ñ‹Ð¿Ð¾Ð»Ð½ÑÐµÑ‚ÑÑ Ð­Ñ‚Ð°Ð¿ 2 (Ñ€ÐµÐ½Ð´ÐµÑ€ + ÑÑ„Ñ„ÐµÐºÑ‚Ñ‹) Ð½Ð° Ñ‚ÐµÐºÑƒÑ‰Ð¸Ñ… Ð½Ð°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ°Ñ…."""
+        requested = str(self.fx_backend.get()).strip().lower()
+        effective = self._effective_fx_backend()
+        if requested == "gpu" and effective == "cpu":
+            return "2) Ð ÐµÐ½Ð´ÐµÑ€ + ÑÑ„Ñ„ÐµÐºÑ‚Ñ‹: CPU (GPU Ð²Ñ‹Ð±Ñ€Ð°Ð½, Ð½Ð¾ Ð¾Ð±Ñ‰Ð¸Ð¹ GPU Ð²Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½/Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½)"
+        if effective == "gpu":
+            return "2) Ð ÐµÐ½Ð´ÐµÑ€ + ÑÑ„Ñ„ÐµÐºÑ‚Ñ‹: GPU (NVENC)"
+        return "2) Ð ÐµÐ½Ð´ÐµÑ€ + ÑÑ„Ñ„ÐµÐºÑ‚Ñ‹: CPU (libx264)"
+
+    def _analysis_components_summary(self) -> str:
+        """Ð¡Ð¿Ð¸ÑÐ¾Ðº AI-ÐºÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ð¾Ð², ÐºÐ¾Ñ‚Ð¾Ñ€Ñ‹Ðµ Ñ€ÐµÐ°Ð»ÑŒÐ½Ð¾ ÑƒÑ‡Ð°ÑÑ‚Ð²ÑƒÑŽÑ‚ Ð² Ð°Ð½Ð°Ð»Ð¸Ð·Ðµ ÑÐµÐ¹Ñ‡Ð°Ñ."""
+        mode = str(self.mode.get()).strip().lower()
+        gpu_ai_available = bool(GPU.available) and bool(self.use_gpu.get())
+        if mode == "split":
+            return "ÐšÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ñ‹ Ð°Ð½Ð°Ð»Ð¸Ð·Ð°: Ð½Ðµ Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÑŽÑ‚ÑÑ (Ñ€ÐµÐ¶Ð¸Ð¼ ÐŸÐ¾ Ð²Ñ€ÐµÐ¼ÐµÐ½Ð¸)"
+
+        active = ["Ð³Ñ€Ð¾Ð¼ÐºÐ¾ÑÑ‚ÑŒ"]
+        disabled = []
+
+        if mode in ("balanced", "full", "hybrid"):
+            if self.opt_laugh.get():
+                active.append("ÑÐ¼ÐµÑ… (CPU)")
+            else:
+                disabled.append("ÑÐ¼ÐµÑ…")
+            if self.opt_motion.get():
+                motion_where = "GPU" if self._is_motion_gpu_enabled() else "CPU"
+                active.append(f"Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ ({motion_where})")
+            else:
+                disabled.append("Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ")
+
+        if mode in ("full", "hybrid"):
+            if self.opt_whisper.get():
+                if mode == "hybrid":
+                    active.append("Ñ€ÐµÑ‡ÑŒ (GPU/CPU Ð°Ð²Ñ‚Ð¾)")
+                else:
+                    active.append("Ñ€ÐµÑ‡ÑŒ (CPU)")
+            else:
+                disabled.append("Ñ€ÐµÑ‡ÑŒ")
+            if self.opt_faces.get():
+                if gpu_ai_available:
+                    active.append("Ð»Ð¸Ñ†Ð° (GPU/CPU Ð°Ð²Ñ‚Ð¾)")
+                else:
+                    active.append("Ð»Ð¸Ñ†Ð° (CPU)")
+            else:
+                disabled.append("Ð»Ð¸Ñ†Ð°")
+
+        text = f"ÐšÐ¾Ð¼Ð¿Ð¾Ð½ÐµÐ½Ñ‚Ñ‹ Ð°Ð½Ð°Ð»Ð¸Ð·Ð°: {', '.join(active)}"
+        if disabled:
+            text += f" | Ð²Ñ‹ÐºÐ»ÑŽÑ‡ÐµÐ½Ð¾: {', '.join(disabled)}"
+        return text
+
+    def _runtime_pipeline_details(self) -> tuple:
+        """ÐŸÐ¾Ð´Ñ€Ð¾Ð±Ð½Ð°Ñ Ñ€Ð°ÑÑˆÐ¸Ñ„Ñ€Ð¾Ð²ÐºÐ° Ñ‚ÐµÐºÑƒÑ‰ÐµÐ³Ð¾ Ð¿Ð°Ð¹Ð¿Ð»Ð°Ð¹Ð½Ð°."""
+        return (
+            self._analysis_backend_summary(),
+            self._effects_backend_summary(),
+            self._analysis_components_summary(),
+        )
+
+    def _runtime_pipeline_summary(self) -> str:
+        """Ð•Ð´Ð¸Ð½Ð°Ñ ÑÑ‚Ñ€Ð¾ÐºÐ° Ð´Ð»Ñ Ð»Ð¾Ð³Ð¾Ð²: Ð½Ð° Ñ‡ÐµÐ¼ Ñ€ÐµÐ°Ð»ÑŒÐ½Ð¾ Ð¿Ð¾Ð¹Ð´ÑƒÑ‚ Ð°Ð½Ð°Ð»Ð¸Ð· Ð¸ ÑÑ„Ñ„ÐµÐºÑ‚Ñ‹."""
+        a, e, c = self._runtime_pipeline_details()
+        return f"{a} | {e} | {c}"
+
+    def _build_ffmpeg_cut_cmd(
+        self,
+        video_path: str,
+        start: float,
+        duration_sec: float,
+        out_path: str,
+        backend: str
+    ) -> List[str]:
+        """Ð¡Ð¾Ð±Ð¸Ñ€Ð°ÐµÑ‚ ÐºÐ¾Ð¼Ð°Ð½Ð´Ñƒ FFmpeg Ð´Ð»Ñ Ð½Ð°Ñ€ÐµÐ·ÐºÐ¸ ÐºÐ»Ð¸Ð¿Ð° Ñ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ñ‹Ð¼ CPU/GPU backend ÑÑ„Ñ„ÐµÐºÑ‚Ð¾Ð²."""
+        vf = self._build_vf()
+        speed = self.speed_val.get()
+        threads = str(max(1, self.cpu_threads.get()))
+
+        cmd = [
+            FFMPEG, "-y",
+            "-threads", threads,      # Ð¾Ð±Ñ‰Ð¸Ð¹ Ð»Ð¸Ð¼Ð¸Ñ‚ Ð¿Ð¾Ñ‚Ð¾ÐºÐ¾Ð² FFmpeg
+            "-ss", str(start),
+            "-i", video_path,
+            "-t", str(duration_sec)
+        ]
+        if vf:
+            cmd += ["-vf", vf]
+
+        af_parts = []
+        if speed != "1x":
+            sp = {"0.5x": 0.5, "1.5x": 1.5, "2x": 2.0}.get(speed, 1.0)
+            if sp > 2.0:
+                af_parts += ["atempo=2.0", f"atempo={sp/2.0:.2f}"]
+            elif sp < 0.5:
+                af_parts += ["atempo=0.5", f"atempo={sp*2.0:.2f}"]
+            else:
+                af_parts.append(f"atempo={sp:.2f}")
+        if af_parts:
+            cmd += ["-af", ",".join(af_parts)]
+
+        if backend == "gpu":
+            cmd += [
+                "-c:v", "h264_nvenc",
+                "-preset", "p5",
+                "-c:a", "aac",
+            ]
+        else:
+            cmd += [
+                "-c:v", "libx264",
+                "-threads", threads,   # Ð¾Ñ‚Ð´ÐµÐ»ÑŒÐ½Ñ‹Ð¹ Ð»Ð¸Ð¼Ð¸Ñ‚ Ð¿Ð¾Ñ‚Ð¾ÐºÐ¾Ð² x264
+                "-c:a", "aac",
+            ]
+
+        cmd += [
+            "-map", "0:v:0", "-map", "0:a:0?",
+            "-avoid_negative_ts", "1", out_path
+        ]
+        return cmd
+
+    def _run_ffmpeg(self, cmd: List[str], timeout: int = Config.FFMPEG_TIMEOUT,
+                    retries: int = 1) -> Optional[subprocess.CompletedProcess]:
+        """
+        Ð—Ð°Ð¿ÑƒÑÐºÐ°ÐµÑ‚ ffmpeg Ñ Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚Ð¾Ð¼, Ð»Ð¾Ð³Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸ÐµÐ¼ Ð¸ retry.
+        retries=1 Ð¾Ð·Ð½Ð°Ñ‡Ð°ÐµÑ‚: 1 Ð¿Ð¾Ð¿Ñ‹Ñ‚ÐºÐ° + 1 Ð¿Ð¾Ð²Ñ‚Ð¾Ñ€ = 2 Ð¿Ð¾Ð¿Ñ‹Ñ‚ÐºÐ¸ Ð²ÑÐµÐ³Ð¾.
+        """
+        logger.debug(f"FFmpeg ÐºÐ¾Ð¼Ð°Ð½Ð´Ð°: {' '.join(cmd[:6])}...")
+
+        def _attempt():
+            result = subprocess.run(
+                cmd, capture_output=True,
+                creationflags=NO_WINDOW,
+                timeout=timeout)
+            if result.returncode != 0:
+                err = result.stderr.decode(errors="ignore")[:200]
+                logger.warning(f"FFmpeg ÐºÐ¾Ð´ {result.returncode}: {err}")
+                raise FFmpegError(f"FFmpeg Ð²ÐµÑ€Ð½ÑƒÐ» ÐºÐ¾Ð´ {result.returncode}: {err[:80]}")
+            return result
+
+        try:
+            return with_retry(_attempt, retries=retries, delay=2.0,
+                              error_cls=FFmpegError, context="FFmpeg")
+        except FFmpegError as e:
+            self._safe_log(f"âš ï¸ {e}", "error")
+            return None
+        except subprocess.TimeoutExpired:
+            msg = f"âš ï¸ FFmpeg Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚ ({timeout}Ñ) â€” Ð¿Ñ€Ð¾Ð¿ÑƒÑÐºÐ°ÑŽ"
+            self._safe_log(msg, "error")
+            logger.error(msg)
+            return None
+        except Exception as e:
+            err = handle_error(e, "FFmpeg")
+            self._safe_log(f"âš ï¸ FFmpeg: {err}", "error")
+            return None
+
+    def _ffmpeg_cut(self, video_path: str, start: float, duration_sec: float, out_path: str) -> None:
+        """ÐÐ°Ñ€ÐµÐ·Ð°ÐµÑ‚ Ð¾Ð´Ð¸Ð½ ÐºÐ»Ð¸Ð¿ Ñ Ð¿Ñ€Ð¸Ð¼ÐµÐ½ÐµÐ½Ð¸ÐµÐ¼ Ð²ÑÐµÑ… ÑÑ„Ñ„ÐµÐºÑ‚Ð¾Ð² Ð¸ Ð¾Ð³Ñ€Ð°Ð½Ð¸Ñ‡ÐµÐ½Ð¸ÐµÐ¼ Ð¿Ð¾Ñ‚Ð¾ÐºÐ¾Ð²."""
+        backend = self._effective_fx_backend()
+        requested = str(self.fx_backend.get()).strip().lower()
+        cmd = self._build_ffmpeg_cut_cmd(video_path, start, duration_sec, out_path, backend)
+        logger.info(f"FFmpeg clip backend: requested={requested or 'cpu'}, effective={backend}")
+        r = self._run_ffmpeg(cmd, timeout=Config.CLIP_TIMEOUT)
+        if r is None and backend == "gpu":
+            self._safe_log("âš ï¸ GPU-Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° ÐºÐ»Ð¸Ð¿Ð° Ð½Ðµ ÑƒÐ´Ð°Ð»Ð°ÑÑŒ â€” Ð¿Ð¾Ð²Ñ‚Ð¾Ñ€ÑÑŽ Ð½Ð° CPU", "warn")
+            logger.warning("FFmpeg GPU clip path failed; retrying CPU path")
+            cmd_cpu = self._build_ffmpeg_cut_cmd(video_path, start, duration_sec, out_path, "cpu")
+            r = self._run_ffmpeg(cmd_cpu, timeout=Config.CLIP_TIMEOUT)
+        if r is None:
+            self._safe_log("  âš ï¸ FFmpeg: ÐºÐ»Ð¸Ð¿ Ð¿Ñ€Ð¾Ð¿ÑƒÑ‰ÐµÐ½ Ð¿Ð¾ÑÐ»Ðµ Ð¾ÑˆÐ¸Ð±ÐºÐ¸/Ñ‚Ð°Ð¹Ð¼Ð°ÑƒÑ‚Ð°", "error")
+
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    # AI ÐÐÐÐ›Ð˜Ð—
+    # â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+    def _analyze_laugh(self, energy: np.ndarray) -> np.ndarray:
+        """Ð”ÐµÑ‚ÐµÐºÑ‚ ÑÐ¼ÐµÑ…Ð° Ð¿Ð¾ Ñ€ÐµÐ·ÐºÐ¸Ð¼ Ð¿Ð¸ÐºÐ°Ð¼ Ð³Ñ€Ð¾Ð¼ÐºÐ¾ÑÑ‚Ð¸."""
+        scores = np.zeros(len(energy))
+        if len(energy) < 3: return scores
+        me = np.mean(energy)
+        for i in range(1, len(energy) - 1):
+            if energy[i] > me * Config.LAUGH_THRESHOLD:
+                scores[max(0, i - 2):min(len(scores), i + 3)] += 2.0
+        return scores
+
+    def _analyze_motion(self, video_path: str, duration: float) -> np.ndarray:
+        """ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ: GPU Ð¿Ñ€Ð¸ Ð²ÐºÐ»ÑŽÑ‡ÐµÐ½Ð½Ð¾Ð¼ Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°Ñ‚ÐµÐ»Ðµ, Ð¸Ð½Ð°Ñ‡Ðµ CPU."""
+        prefer_gpu = self._effective_fx_backend() == "gpu"
+        if prefer_gpu:
+            if self._detect_motion_gpu_capability():
+                scores_gpu = self._analyze_motion_gpu(video_path, duration)
+                if scores_gpu is not None:
+                    return scores_gpu
+                # Runtime Ð¾ÑˆÐ¸Ð±ÐºÐ° GPU-Ð¿ÑƒÑ‚Ð¸: Ð´Ð°Ð»ÑŒÑˆÐµ Ð² ÑÐµÑÑÐ¸Ð¸ Ð½Ðµ Ð¿Ñ‹Ñ‚Ð°ÐµÐ¼ÑÑ ÑÐ½Ð¾Ð²Ð°, ÑƒÑ…Ð¾Ð´Ð¸Ð¼ Ð½Ð° CPU.
+                self._motion_gpu_capable = False
+                self._motion_gpu_cap_checked = True
+            if not self._warned_motion_gpu_runtime:
+                self._warned_motion_gpu_runtime = True
+                self._safe_log("âš ï¸ Ð”Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ: GPU Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ â€” Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÑŽ CPU", "warn")
+        return self._analyze_motion_cpu(video_path, duration)
+
+    def _analyze_motion_cpu(self, video_path: str, duration: float) -> np.ndarray:
+        """CPU Ð¿ÑƒÑ‚ÑŒ Ð°Ð½Ð°Ð»Ð¸Ð·Ð° Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ Ñ‡ÐµÑ€ÐµÐ· Ð¿Ð¾Ð¿Ð°Ñ€Ð½Ð¾Ðµ ÑÑ€Ð°Ð²Ð½ÐµÐ½Ð¸Ðµ ÐºÐ°Ð´Ñ€Ð¾Ð²."""
+        scores = np.zeros(int(duration))
+        cap = None
+        try:
+            import cv2
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS) or 25
+            if fps <= 1:
+                fps = 25
+            skip = max(Config.MOTION_SKIP_BASE, int(duration / Config.MOTION_ADAPT_DIV))
+            if self.mode.get() == "balanced":
+                skip = max(skip, int(skip * Config.BALANCED_MOTION_SKIP_MULT))
+            prev, fi = None, 0
+            _throttle_every = max(1, int(fps * 2))  # Ð¿Ñ€Ð¸Ð¼ÐµÑ€Ð½Ð¾ ÐºÐ°Ð¶Ð´Ñ‹Ðµ ~2 ÑÐµÐºÑƒÐ½Ð´Ñ‹ Ð²Ð¸Ð´ÐµÐ¾
+            logger.info(f"ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ (CPU): skip={skip}, duration={duration:.0f}Ñ")
+            while True:
+                if self.stop_flag.is_set():
+                    logger.info("ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ (CPU) Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½ (stop_flag)")
+                    break
+                if not self._wait_if_paused():
+                    logger.info("ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ (CPU) Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½ (pause/stop)")
+                    break
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                msec = cap.get(cv2.CAP_PROP_POS_MSEC)
+                sec = int(msec / 1000) if msec > 0 else int(fi / fps)
+                gray = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (160, 90))
+                if prev is not None and sec < len(scores):
+                    scores[sec] += float(cv2.absdiff(prev, gray).mean()) / 10.0
+                prev = gray
+                fi += 1
+
+                if fi % _throttle_every == 0:
+                    self._check_and_wait_temp()
+                    self.control_load(max_cpu=self._cpu_load_limit_by_temp_setting())
+
+                for _ in range(skip - 1):
+                    if self.stop_flag.is_set():
+                        break
+                    if not self._wait_if_paused():
+                        break
+                    r2, _ = cap.read()
+                    fi += 1
+                    if not r2:
+                        break
+            logger.info("ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ (CPU) Ð·Ð°Ð²ÐµÑ€ÑˆÑ‘Ð½")
+            self._safe_log("ðŸŽ¬ Ð”Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ Ð¿Ñ€Ð¾Ð°Ð½Ð°Ð»Ð¸Ð·Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¾ (CPU)", "success")
+        except Exception as e:
+            logger.error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð°Ð½Ð°Ð»Ð¸Ð·Ð° Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ (CPU): {e}", exc_info=True)
+            self._safe_log(f"âš ï¸ Ð”Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ (CPU): {e}", "error")
+        finally:
+            if cap is not None:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+        return scores
+
+    def _analyze_motion_gpu(self, video_path: str, duration: float) -> Optional[np.ndarray]:
+        """GPU Ð¿ÑƒÑ‚ÑŒ Ð°Ð½Ð°Ð»Ð¸Ð·Ð° Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ Ñ‡ÐµÑ€ÐµÐ· OpenCV CUDA. Ð’Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÐµÑ‚ None Ð¿Ñ€Ð¸ fallback Ð½Ð° CPU."""
+        scores = np.zeros(int(duration))
+        cap = None
+        try:
+            import cv2
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS) or 25
+            if fps <= 1:
+                fps = 25
+            skip = max(Config.MOTION_SKIP_BASE, int(duration / Config.MOTION_ADAPT_DIV))
+            if self.mode.get() == "balanced":
+                skip = max(skip, int(skip * Config.BALANCED_MOTION_SKIP_MULT))
+            prev_gpu, fi = None, 0
+            _throttle_every = max(1, int(fps * 2))  # Ð¿Ñ€Ð¸Ð¼ÐµÑ€Ð½Ð¾ ÐºÐ°Ð¶Ð´Ñ‹Ðµ ~2 ÑÐµÐºÑƒÐ½Ð´Ñ‹ Ð²Ð¸Ð´ÐµÐ¾
+            logger.info(f"ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ (GPU): skip={skip}, duration={duration:.0f}Ñ")
+
+            while True:
+                if self.stop_flag.is_set():
+                    logger.info("ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ (GPU) Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½ (stop_flag)")
+                    break
+                if not self._wait_if_paused():
+                    logger.info("ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ (GPU) Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½ (pause/stop)")
+                    break
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                msec = cap.get(cv2.CAP_PROP_POS_MSEC)
+                sec = int(msec / 1000) if msec > 0 else int(fi / fps)
+
+                gpu_frame = cv2.cuda_GpuMat()
+                gpu_frame.upload(frame)
+                gray_gpu = cv2.cuda.cvtColor(gpu_frame, cv2.COLOR_BGR2GRAY)
+                small_gpu = cv2.cuda.resize(gray_gpu, (160, 90))
+
+                if prev_gpu is not None and sec < len(scores):
+                    diff_gpu = cv2.cuda.absdiff(prev_gpu, small_gpu)
+                    diff = diff_gpu.download()
+                    scores[sec] += float(diff.mean()) / 10.0
+
+                prev_gpu = small_gpu
+                fi += 1
+
+                if fi % _throttle_every == 0:
+                    self._check_and_wait_temp()
+                    self.control_gpu_load(max_gpu=self._gpu_load_limit_by_temp_setting())
+                    self.control_load(max_cpu=self._cpu_load_limit_by_temp_setting())
+
+                for _ in range(skip - 1):
+                    if self.stop_flag.is_set():
+                        break
+                    if not self._wait_if_paused():
+                        break
+                    r2, _ = cap.read()
+                    fi += 1
+                    if not r2:
+                        break
+
+            logger.info("ÐÐ½Ð°Ð»Ð¸Ð· Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ (GPU) Ð·Ð°Ð²ÐµÑ€ÑˆÑ‘Ð½")
+            self._safe_log("ðŸŽ¬ Ð”Ð²Ð¸Ð¶ÐµÐ½Ð¸Ðµ Ð¿Ñ€Ð¾Ð°Ð½Ð°Ð»Ð¸Ð·Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¾ (GPU)", "success")
+            return scores
+        except Exception as e:
+            logger.warning(f"GPU Ð¿ÑƒÑ‚ÑŒ Ð´Ð²Ð¸Ð¶ÐµÐ½Ð¸Ñ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½, fallback Ð½Ð° CPU: {e}")
+            return None
+        finally:
+            if cap is not None:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+
+    def _analyze_speech(self, audio_path: str, duration: float) -> np.ndarray:
+        """ÐžÐ±Ñ‹Ñ‡Ð½Ñ‹Ð¹ Whisper Ð½Ð° CPU â€” Ð·Ð°Ð¿Ð°ÑÐ½Ð¾Ð¹ Ð²Ð°Ñ€Ð¸Ð°Ð½Ñ‚."""
+        scores = np.zeros(int(duration))
+        try:
+            import whisper
+            if not self._wait_if_paused():
+                return scores
+            if self.whisper_model is None:
+                logger.info("Ð—Ð°Ð³Ñ€ÑƒÐ¶Ð°ÑŽ Whisper tiny (CPU)...")
+                self._safe_log(" Ð—Ð°Ð³Ñ€ÑƒÐ¶Ð°ÑŽ Whisper tiny (CPU)...", "info")
+                self.whisper_model = whisper.load_model("tiny")
+            result = self.whisper_model.transcribe(audio_path, fp16=False)
+            if self.stop_flag.is_set():
+                return scores
+            scores = self._parse_segments(result.get("segments", []), scores)
+            self.control_load(max_cpu=self._cpu_load_limit_by_temp_setting())
+            logger.info("Whisper (CPU) Ð·Ð°Ð²ÐµÑ€ÑˆÑ‘Ð½")
+            self._safe_log(" Ð ÐµÑ‡ÑŒ Ð¿Ñ€Ð¾Ð°Ð½Ð°Ð»Ð¸Ð·Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð° (CPU)", "success")
+        except Exception as e:
+            logger.error(f"Whisper CPU Ð¾ÑˆÐ¸Ð±ÐºÐ°: {e}")
+            self._safe_log(f"âš ï¸ Whisper CPU: {e}", "error")
+        return scores
+
+    def _analyze_speech_faster(self, audio_path: str, duration: float, device: str = "cpu") -> np.ndarray:
+        """
+        faster-whisper Ñ retry Ð¸ fallback Ð½Ð° CPU.
+        ÐœÐ¾Ð´ÐµÐ»ÑŒ Ð·Ð°Ð³Ñ€ÑƒÐ¶Ð°ÐµÑ‚ÑÑ Ð¾Ð´Ð¸Ð½ Ñ€Ð°Ð· Ð¸ Ð¿ÐµÑ€ÐµÐ¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ÑÑ.
+        """
+        scores = np.zeros(int(duration))
+
+        def _load_and_transcribe():
+            from faster_whisper import WhisperModel
+            if self.whisper_model is None:
+                compute = "float16" if device == "cuda" else "int8"
+                cpu_threads = max(1, int(self.cpu_threads.get()))
+                logger.info(f"Ð—Ð°Ð³Ñ€ÑƒÐ¶Ð°ÑŽ faster-whisper tiny ({device}, {compute})...")
+                self._safe_log(f" Ð—Ð°Ð³Ñ€ÑƒÐ¶Ð°ÑŽ faster-whisper ({device.upper()}, {compute})...", "info")
+                self.whisper_model = WhisperModel(
+                    "tiny", device=device, compute_type=compute,
+                    cpu_threads=cpu_threads, num_workers=1
+                )
+            segs, _ = self.whisper_model.transcribe(audio_path, beam_size=1)
+            return segs
+
+        try:
+            if not self._wait_if_paused():
+                return scores
+            segments_iter = with_retry(
+                _load_and_transcribe, retries=1, delay=3.0,
+                error_cls=AIError, context="faster-whisper"
+            )
+            kws = [k.strip().lower() for k in self.keywords.get().split(",") if k.strip()]
+            for i, seg in enumerate(segments_iter):
+                # Ð¤Ð¸ÐºÑ #2: emergency stop Ð²Ð½ÑƒÑ‚Ñ€Ð¸ Whisper Ñ†Ð¸ÐºÐ»Ð°
+                if self.stop_flag.is_set():
+                    logger.info("Whisper Ð°Ð½Ð°Ð»Ð¸Ð· Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½ (stop_flag)")
+                    break
+                if not self._wait_if_paused():
+                    logger.info("Whisper Ð°Ð½Ð°Ð»Ð¸Ð· Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½ (pause/stop)")
+                    break
+                s0, s1 = int(seg.start), int(seg.end)
+                txt    = seg.text.lower()
+                w      = 1.0 / max(s1 - s0 + 1, 1)
+                for s in range(s0, min(s1 + 1, len(scores))):
+                    scores[s] += w
+                    for kw in kws:
+                        if kw in txt: scores[s] += 3.0 * w
+                if i % 5 == 0:
+                    self._check_and_wait_temp()
+                    self.control_load(max_cpu=self._cpu_load_limit_by_temp_setting())
+            logger.info(f"faster-whisper ({device}) Ð·Ð°Ð²ÐµÑ€ÑˆÑ‘Ð½")
+            self._safe_log(f" Ð ÐµÑ‡ÑŒ Ð¿Ñ€Ð¾Ð°Ð½Ð°Ð»Ð¸Ð·Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð° ({device.upper()})", "success")
+
+        except ImportError:
+            logger.warning("faster-whisper Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½, Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°ÑŽÑÑŒ Ð½Ð° Ð¾Ð±Ñ‹Ñ‡Ð½Ñ‹Ð¹ Whisper")
+            self._safe_log("âš ï¸ faster-whisper Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½ â€” Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°ÑŽ Ð½Ð° Ð¾Ð±Ñ‹Ñ‡Ð½Ñ‹Ð¹ Whisper", "warn")
+            self._cleanup_whisper()
+            return self._analyze_speech(audio_path, duration)
+
+        except AIError as e:
+            logger.error(f"faster-whisper Ð¾ÑˆÐ¸Ð±ÐºÐ° Ð¿Ð¾ÑÐ»Ðµ retry: {e}")
+            self._safe_log(f"âš ï¸ faster-whisper Ð½Ðµ ÑƒÐ´Ð°Ð»ÑÑ â€” Ð¿Ñ€Ð¾Ð±ÑƒÑŽ CPU", "warn")
+            GPU.clear_vram()
+            self._cleanup_whisper()
+            return self._analyze_speech(audio_path, duration)
+
+        except Exception as e:
+            err = handle_error(e, "faster-whisper")
+            self._safe_log(f"âš ï¸ Whisper: {err} â€” Ð¿Ñ€Ð¾Ð±ÑƒÑŽ CPU", "warn")
+            GPU.clear_vram()
+            self._cleanup_whisper()
+            return self._analyze_speech(audio_path, duration)
+
+        return scores
+
+    def _parse_segments(self, segments: list, scores: np.ndarray) -> np.ndarray:
+        """ÐŸÐ°Ñ€ÑÐ¸Ñ‚ ÑÐµÐ³Ð¼ÐµÐ½Ñ‚Ñ‹ Whisper Ð¸ Ð·Ð°Ð¿Ð¾Ð»Ð½ÑÐµÑ‚ Ð¼Ð°ÑÑÐ¸Ð² Ð¾Ñ†ÐµÐ½Ð¾Ðº."""
+        kws = [k.strip().lower() for k in self.keywords.get().split(",") if k.strip()]
+        for i, seg in enumerate(segments):
+            if self.stop_flag.is_set():
+                break
+            if not self._wait_if_paused():
+                break
+            s0, s1 = int(seg["start"]), int(seg["end"])
+            txt    = seg["text"].lower()
+            w      = 1.0 / max(s1 - s0 + 1, 1)
+            for s in range(s0, min(s1 + 1, len(scores))):
+                scores[s] += w
+                for kw in kws:
+                    if kw in txt: scores[s] += 3.0 * w
+            if i % 10 == 0:
+                self.control_load(max_cpu=self._cpu_load_limit_by_temp_setting())
+        return scores
+
+    def _analyze_faces(self, video_path: str, duration: float) -> np.ndarray:
+        """Ð”ÐµÑ‚ÐµÐºÑ‚ Ð»Ð¸Ñ†: ÑÐ½Ð°Ñ‡Ð°Ð»Ð° OpenCV YuNet CUDA, Ð·Ð°Ñ‚ÐµÐ¼ MediaPipe Tasks, Ð·Ð°Ñ‚ÐµÐ¼ OpenCV Haar."""
+        scores = np.zeros(int(duration))
+        try:
+            import cv2
+
+            detector_kind = ""
+            detector = None
+            cascade = None
+            mp = None
+
+            # 1) ÐŸÑ€ÐµÐ´Ð¿Ð¾Ñ‡Ñ‚Ð¸Ñ‚ÐµÐ»ÑŒÐ½Ð¾: OpenCV YuNet Ð½Ð° CUDA (Ñ€ÐµÐ°Ð»ÑŒÐ½Ñ‹Ð¹ GPU Ð¿ÑƒÑ‚ÑŒ Ð±ÐµÐ· Ð½Ð¾Ð²Ñ‹Ñ… Ð±Ð¸Ð±Ð»Ð¸Ð¾Ñ‚ÐµÐº)
+            gpu_requested = bool(self.use_gpu.get()) and bool(GPU.available)
+            if gpu_requested:
+                try:
+                    model_path = self._find_face_gpu_model_path()
+                    if not model_path:
+                        raise FileNotFoundError(
+                            "ÐÐµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð° ONNX Ð¼Ð¾Ð´ÐµÐ»ÑŒ YuNet Ð´Ð»Ñ GPU-Ð´ÐµÑ‚ÐµÐºÑ‚Ð¾Ñ€Ð° Ð»Ð¸Ñ† "
+                            "(Ð¸Ñ‰Ñƒ Ð² ÐºÐ¾Ñ€Ð½Ðµ, models/, assets/)."
+                        )
+                    cuda_count = 0
+                    if hasattr(cv2, "cuda") and hasattr(cv2.cuda, "getCudaEnabledDeviceCount"):
+                        try:
+                            cuda_count = int(cv2.cuda.getCudaEnabledDeviceCount())
+                        except Exception:
+                            cuda_count = 0
+                    if cuda_count <= 0:
+                        raise RuntimeError("OpenCV Ð½Ðµ Ð²Ð¸Ð´Ð¸Ñ‚ CUDA-ÑƒÑÑ‚Ñ€Ð¾Ð¹ÑÑ‚Ð²Ð¾ (getCudaEnabledDeviceCount=0)")
+                    in_size = (Config.FACE_GPU_INPUT_SIZE, Config.FACE_GPU_INPUT_SIZE)
+                    try:
+                        detector = cv2.FaceDetectorYN_create(
+                            model_path, "", in_size,
+                            Config.FACE_GPU_SCORE_THRESHOLD,
+                            Config.FACE_GPU_NMS_THRESHOLD,
+                            Config.FACE_GPU_TOP_K,
+                            cv2.dnn.DNN_BACKEND_CUDA,
+                            cv2.dnn.DNN_TARGET_CUDA_FP16
+                        )
+                    except Exception:
+                        detector = cv2.FaceDetectorYN_create(
+                            model_path, "", in_size,
+                            Config.FACE_GPU_SCORE_THRESHOLD,
+                            Config.FACE_GPU_NMS_THRESHOLD,
+                            Config.FACE_GPU_TOP_K,
+                            cv2.dnn.DNN_BACKEND_CUDA,
+                            cv2.dnn.DNN_TARGET_CUDA
+                        )
+                    detector_kind = "opencv-yunet-cuda"
+                    logger.info(f"ÐÐ½Ð°Ð»Ð¸Ð· Ð»Ð¸Ñ†: OpenCV YuNet CUDA model={os.path.basename(model_path)}")
+                    self._safe_log("âš¡ Ð›Ð¸Ñ†Ð°: GPU Ð´ÐµÑ‚ÐµÐºÑ‚Ð¾Ñ€ Ð°ÐºÑ‚Ð¸Ð²ÐµÐ½ (OpenCV CUDA)", "success")
+                except Exception as gpu_err:
+                    logger.warning(f"Face GPU detector unavailable, fallback to CPU path: {gpu_err}")
+                    if isinstance(gpu_err, FileNotFoundError):
+                        if not self._warned_no_face_gpu_model:
+                            self._warned_no_face_gpu_model = True
+                            self._safe_log("âš ï¸ ÐÐµÑ‚ ONNX Ð¼Ð¾Ð´ÐµÐ»Ð¸ YuNet Ð´Ð»Ñ GPU â€” Ð¿ÐµÑ€ÐµÑ…Ð¾Ð¶Ñƒ Ð½Ð° CPU Ð´ÐµÑ‚ÐµÐºÑ‚Ð¾Ñ€ Ð»Ð¸Ñ†", "warn")
+                    else:
+                        if not self._warned_no_face_gpu_runtime:
+                            self._warned_no_face_gpu_runtime = True
+                            self._safe_log("âš ï¸ GPU Ð´ÐµÑ‚ÐµÐºÑ‚Ð¾Ñ€ Ð»Ð¸Ñ† Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ â€” Ð¿ÐµÑ€ÐµÑ…Ð¾Ð¶Ñƒ Ð½Ð° CPU Ð´ÐµÑ‚ÐµÐºÑ‚Ð¾Ñ€", "warn")
+
+            # 2) Ð•ÑÐ»Ð¸ GPU Ð¿ÑƒÑ‚ÑŒ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ â€” MediaPipe Tasks (CPU)
+            if not detector_kind:
+                try:
+                    import mediapipe as mp
+                    from mediapipe.tasks import python as mp_python
+                    from mediapipe.tasks.python import vision as mp_vision
+
+                    model_path = self._find_face_task_model_path()
+                    if not model_path:
+                        raise FileNotFoundError(
+                            "ÐÐµ Ð½Ð°Ð¹Ð´ÐµÐ½Ð° Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð´Ð»Ñ FaceDetector (.tflite). "
+                            "ÐŸÐ¾Ð»Ð¾Ð¶Ð¸ Ñ„Ð°Ð¹Ð» Ð² Ð¿Ð°Ð¿ÐºÑƒ Ñ Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸ÐµÐ¼ Ð¸Ð»Ð¸ Ð² models/."
+                        )
+
+                    options = mp_vision.FaceDetectorOptions(
+                        base_options=mp_python.BaseOptions(model_asset_path=model_path),
+                        running_mode=mp_vision.RunningMode.IMAGE,
+                        min_detection_confidence=0.5,
+                    )
+                    detector = mp_vision.FaceDetector.create_from_options(options)
+                    detector_kind = "mediapipe-tasks"
+                    logger.info(f"ÐÐ½Ð°Ð»Ð¸Ð· Ð»Ð¸Ñ†: MediaPipe Tasks model={os.path.basename(model_path)}")
+                except Exception as mp_err:
+                    # 3) ÐŸÐ¾ÑÐ»ÐµÐ´Ð½Ð¸Ð¹ fallback: OpenCV Haar (CPU)
+                    detector_kind = "haar"
+                    cascade_path = os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
+                    cascade = cv2.CascadeClassifier(cascade_path)
+                    if cascade.empty():
+                        raise RuntimeError(
+                            f"MediaPipe Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ ({mp_err}) Ð¸ Haar cascade Ð½Ðµ Ð·Ð°Ð³Ñ€ÑƒÐ·Ð¸Ð»ÑÑ: {cascade_path}"
+                        )
+                    if not self._warned_no_face_task_model:
+                        self._warned_no_face_task_model = True
+                        self._safe_log("âš ï¸ MediaPipe Tasks Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ â€” Ð¸ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÑŽ OpenCV (Haar) Ð´Ð»Ñ Ð»Ð¸Ñ†", "warn")
+                    logger.warning(f"Faces fallback to OpenCV Haar: {mp_err}")
+
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS) or 25
+            if fps <= 1:
+                fps = 25
+            skip = max(Config.FACES_SKIP_BASE, int(duration / Config.FACES_ADAPT_DIV))
+            fi = 0
+            _throttle_every = max(1, int(fps * 2))  # Ð¿Ñ€Ð¸Ð¼ÐµÑ€Ð½Ð¾ ÐºÐ°Ð¶Ð´Ñ‹Ðµ ~2 ÑÐµÐºÑƒÐ½Ð´Ñ‹ Ð²Ð¸Ð´ÐµÐ¾
+            logger.info(f"ÐÐ½Ð°Ð»Ð¸Ð· Ð»Ð¸Ñ†: detector={detector_kind}, skip={skip}, duration={duration:.0f}Ñ")
+            while True:
+                if self.stop_flag.is_set():
+                    logger.info("ÐÐ½Ð°Ð»Ð¸Ð· Ð»Ð¸Ñ† Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½ (stop_flag)")
+                    break
+                if not self._wait_if_paused():
+                    logger.info("ÐÐ½Ð°Ð»Ð¸Ð· Ð»Ð¸Ñ† Ð¿Ñ€ÐµÑ€Ð²Ð°Ð½ (pause/stop)")
+                    break
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                msec = cap.get(cv2.CAP_PROP_POS_MSEC)
+                sec = int(msec / 1000) if msec > 0 else int(fi / fps)
+                detections = 0
+
+                if detector_kind == "opencv-yunet-cuda":
+                    try:
+                        h, w = frame.shape[:2]
+                        detector.setInputSize((w, h))
+                        _, faces = detector.detect(frame)
+                        detections = len(faces) if faces is not None else 0
+                    except Exception as gpu_detect_err:
+                        logger.warning(f"GPU face detect runtime error, fallback to Haar: {gpu_detect_err}")
+                        if not self._warned_no_face_gpu_runtime:
+                            self._warned_no_face_gpu_runtime = True
+                            self._safe_log("âš ï¸ ÐžÑˆÐ¸Ð±ÐºÐ° GPU-Ð´ÐµÑ‚ÐµÐºÑ‚Ð¾Ñ€Ð° Ð»Ð¸Ñ† â€” Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð°ÑŽÑÑŒ Ð½Ð° CPU (Haar)", "warn")
+                        detector_kind = "haar"
+                        cascade_path = os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
+                        cascade = cv2.CascadeClassifier(cascade_path)
+                        if cascade.empty():
+                            raise RuntimeError(f"ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿ÐµÑ€ÐµÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒÑÑ Ð½Ð° Haar: {cascade_path}")
+                        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                        found = cascade.detectMultiScale(gray, scaleFactor=1.12, minNeighbors=5, minSize=(40, 40))
+                        detections = len(found)
+                elif detector_kind == "mediapipe-tasks":
+                    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                    res = detector.detect(mp_image)
+                    detections = len(res.detections) if res and res.detections else 0
+                else:
+                    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                    found = cascade.detectMultiScale(gray, scaleFactor=1.12, minNeighbors=5, minSize=(40, 40))
+                    detections = len(found)
+
+                if sec < len(scores) and detections:
+                    scores[sec] += float(detections)
+                fi += 1
+
+                # Runtime throttle â€” ÐºÐ°Ð¶Ð´Ñ‹Ðµ N ÐºÐ°Ð´Ñ€Ð¾Ð²
+                if fi % _throttle_every == 0:
+                    self._check_and_wait_temp()
+                    if detector_kind == "opencv-yunet-cuda":
+                        self.control_gpu_load(max_gpu=self._gpu_load_limit_by_temp_setting())
+                    self.control_load(max_cpu=self._cpu_load_limit_by_temp_setting())
+
+                for _ in range(skip - 1):
+                    if self.stop_flag.is_set():
+                        break
+                    if not self._wait_if_paused():
+                        break
+                    r2, _ = cap.read()
+                    fi += 1
+                    if not r2:
+                        break
+
+            cap.release()
+            if detector is not None and detector_kind == "mediapipe-tasks" and hasattr(detector, "close"):
+                detector.close()
+
+            if detector_kind == "opencv-yunet-cuda":
+                self._safe_log("ðŸ‘¤ Ð›Ð¸Ñ†Ð° Ð¿Ñ€Ð¾Ð°Ð½Ð°Ð»Ð¸Ð·Ð¸Ñ€Ð¾Ð²Ð°Ð½Ñ‹ (GPU CUDA)", "success")
+            else:
+                self._safe_log("ðŸ‘¤ Ð›Ð¸Ñ†Ð° Ð¿Ñ€Ð¾Ð°Ð½Ð°Ð»Ð¸Ð·Ð¸Ñ€Ð¾Ð²Ð°Ð½Ñ‹ (CPU)", "success")
+            logger.info("ÐÐ½Ð°Ð»Ð¸Ð· Ð»Ð¸Ñ† Ð·Ð°Ð²ÐµÑ€ÑˆÑ‘Ð½")
+        except Exception as e:
+            logger.error(f"ÐžÑˆÐ¸Ð±ÐºÐ° Ð°Ð½Ð°Ð»Ð¸Ð·Ð° Ð»Ð¸Ñ†: {e}", exc_info=True)
+            self._safe_log(f"âš ï¸ Ð›Ð¸Ñ†Ð°: {e}", "error")
+        return scores
+
+
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Ð—ÐÐŸÐ£Ð¡Ðš
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+if __name__ == "__main__":
+    import sys
+    print(">>> Ð¡Ñ‚Ð°Ñ€Ñ‚ Ð¿Ñ€Ð¸Ð»Ð¾Ð¶ÐµÐ½Ð¸Ñ", flush=True)
+    try:
+        print(">>> Ð¡Ð¾Ð·Ð´Ð°ÑŽ ClipAIApp...", flush=True)
+        app = ClipAIApp()
+        print(">>> ClipAIApp ÑÐ¾Ð·Ð´Ð°Ð½!", flush=True)
+        app.update()
+        app.deiconify()
+        print(">>> Ð—Ð°Ð¿ÑƒÑÐºÐ°ÑŽ mainloop...", flush=True)
+        app.mainloop()
+    except Exception as e:
+        import traceback
+        print(f">>> ÐžÐ¨Ð˜Ð‘ÐšÐ: {e}", flush=True)
+        traceback.print_exc()
+        if sys.stdin and sys.stdin.isatty():
+            input("ÐÐ°Ð¶Ð¼Ð¸ Enter Ð´Ð»Ñ Ð²Ñ‹Ñ…Ð¾Ð´Ð°...")
+
+
