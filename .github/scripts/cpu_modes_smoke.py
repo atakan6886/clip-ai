@@ -112,6 +112,10 @@ def _configure_common(app, out_dir: Path):
     app.opt_motion.set(True)
     app.opt_faces.set(True)
 
+    # В cloud-тесте не нужен tkinter .after/.Text — пишем сразу в stdout.
+    app._safe_log = lambda msg, tag="info": print(f"[{tag}] {msg}", flush=True)
+    app._safe_progress = lambda val, text="": print(f"[progress {val:.1f}] {text}", flush=True)
+
 
 def _run_mode(app, video_path: str, mode: str, timeout_sec=480):
     mode_out = OUT_ROOT / f"mode_{mode}"
@@ -126,32 +130,29 @@ def _run_mode(app, video_path: str, mode: str, timeout_sec=480):
     else:
         target = lambda: app._process_one(video_path, t0)
 
-    err = []
+    watchdog_stop = threading.Event()
 
-    def wrapped():
+    def watchdog():
+        if watchdog_stop.wait(timeout_sec):
+            return
+        print(f"[TIMEOUT] mode={mode} exceeded {timeout_sec}s", flush=True)
         try:
-            target()
-        except Exception as e:
-            err.append(e)
-            traceback.print_exc()
-
-    th = threading.Thread(target=wrapped, daemon=True)
-    th.start()
-    deadline = time.time() + timeout_sec
-
-    while th.is_alive() and time.time() < deadline:
-        try:
-            app.update()
+            import faulthandler
+            import sys
+            faulthandler.dump_traceback(file=sys.stdout, all_threads=True)
         except Exception:
-            pass
-        time.sleep(0.05)
+            traceback.print_exc()
+        os._exit(124)
 
-    if th.is_alive():
-        app.stop_flag.set()
-        raise TimeoutError(f"Mode '{mode}' timeout > {timeout_sec}s (possible hang)")
+    threading.Thread(target=watchdog, daemon=True).start()
 
-    if err:
-        raise RuntimeError(f"Mode '{mode}' crashed: {err[0]}")
+    try:
+        target()  # ВАЖНО: выполняем в main-thread, иначе tkinter vars падают.
+    except Exception as e:
+        traceback.print_exc()
+        raise RuntimeError(f"Mode '{mode}' crashed: {e}") from e
+    finally:
+        watchdog_stop.set()
 
     clips = list(mode_out.glob("*.mp4"))
     if len(clips) == 0:
