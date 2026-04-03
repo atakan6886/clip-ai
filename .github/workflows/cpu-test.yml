@@ -1,0 +1,30 @@
+name: CPU Cloud Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cpu-test:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy psutil opencv-python
+
+      - name: Syntax check
+        run: python -m py_compile clip_ai_app_v5.py
+
+      - name: Import check
+        run: |
+          python -c "import importlib.util; p='clip_ai_app_v5.py'; s=importlib.util.spec_from_file_location('app', p); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); print('import ok')"
